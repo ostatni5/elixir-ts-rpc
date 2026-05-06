@@ -1,0 +1,137 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  elixir:
+    name: Elixir (library)
+    runs-on: ubuntu-latest
+    env:
+      MIX_ENV: test
+    defaults:
+      run:
+        working-directory: apps/rpc_elixir
+    steps:
+      - uses: actions/checkout@v4
+
+      # Versions pinned to match .tool-versions: erlang 28.1, elixir 1.19.5-otp-28.
+      - name: Set up Erlang/Elixir
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: "28.1"
+          elixir-version: "1.19.5-otp-28"
+
+      - name: Cache deps and _build
+        uses: actions/cache@v4
+        with:
+          path: |
+            apps/rpc_elixir/deps
+            apps/rpc_elixir/_build
+          key: ${{ runner.os }}-mix-${{ hashFiles('apps/rpc_elixir/mix.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-mix-
+
+      # Separate cache for the dialyzer PLT (lives under _build/test/plt, per mix.exs).
+      - name: Cache dialyzer PLT
+        uses: actions/cache@v4
+        with:
+          path: apps/rpc_elixir/_build/test/plt
+          key: ${{ runner.os }}-plt-otp28.1-elixir1.19.5-${{ hashFiles('apps/rpc_elixir/mix.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-plt-otp28.1-elixir1.19.5-
+
+      - name: Install dependencies
+        run: mix deps.get
+
+      - name: Check formatting
+        run: mix format --check-formatted
+
+      - name: Credo
+        run: mix credo --strict
+
+      - name: Tests
+        run: mix test
+
+      - name: Dialyzer
+        run: mix dialyzer
+
+  javascript:
+    name: JavaScript / TypeScript
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Node version pinned to match .tool-versions: nodejs 22.0.0.
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.0.0"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Example clients are typechecked in the `integration` job: they depend on
+      # the generated rpc.gen.ts (not present here) and the built client package.
+      - name: Typecheck
+        run: npm run typecheck --workspace @elixir-ts-rpc/client
+
+      - name: Client tests
+        run: npm run test --workspace @elixir-ts-rpc/client
+
+      - name: Biome
+        run: npx biome ci .
+
+  integration:
+    name: Example end-to-end (codegen + typecheck)
+    runs-on: ubuntu-latest
+    env:
+      MIX_ENV: dev
+    steps:
+      - uses: actions/checkout@v4
+
+      # Versions pinned to match .tool-versions: erlang 28.1, elixir 1.19.5-otp-28.
+      - name: Set up Erlang/Elixir
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: "28.1"
+          elixir-version: "1.19.5-otp-28"
+
+      # Node version pinned to match .tool-versions: nodejs 22.0.0.
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.0.0"
+          cache: npm
+
+      # Each example regenerates client/src/rpc.gen.ts via the :elixir_ts_rpc
+      # compiler hook (see each server's mix.exs / config.exs) during mix compile.
+      - name: Compile basic example (generates rpc.gen.ts)
+        working-directory: examples/basic/server
+        run: |
+          mix deps.get
+          mix compile
+
+      - name: Compile phoenix example (generates rpc.gen.ts)
+        working-directory: examples/phoenix/server
+        run: |
+          mix deps.get
+          mix compile
+
+      - name: Install JS dependencies
+        run: npm ci
+
+      # rpc.gen.ts imports from @elixir-ts-rpc/client, whose dist/ is gitignored;
+      # build it so the example clients can resolve the package's type declarations.
+      - name: Build client package
+        run: npm run build --workspace @elixir-ts-rpc/client
+
+      - name: Typecheck generated example clients
+        run: |
+          npm run typecheck --workspace @examples/basic-client
+          npm run typecheck --workspace @examples/phoenix-client
