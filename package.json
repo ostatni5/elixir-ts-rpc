@@ -1,0 +1,25 @@
+{
+  "name": "elixir-ts-rpc",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "examples/*/client",
+    "docs"
+  ],
+  "scripts": {
+    "prepare": "lefthook install",
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "format": "biome format --write .",
+    "lint": "biome lint .",
+    "check": "biome check --write .",
+    "docs:dev": "npm run docs:dev --workspace @elixir-ts-rpc/docs",
+    "docs:build": "npm run docs:build --workspace @elixir-ts-rpc/docs",
+    "docs:preview": "npm run docs:preview --workspace @elixir-ts-rpc/docs"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.16",
+    "lefthook": "^2.1.9"
+  }
+}

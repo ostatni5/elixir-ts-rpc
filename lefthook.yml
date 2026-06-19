@@ -1,0 +1,52 @@
+# Git hooks managed by lefthook. Installed automatically via the package.json
+# "prepare" script on `npm install`; run `npx lefthook install` to (re)wire.
+#
+# Each job is gated by `glob`, so a commit only triggers the checks for the file
+# types it actually touches (an Elixir-only commit skips the TS typecheck, and
+# vice versa). `root` scopes {staged_files} and the working directory to that
+# subproject.
+pre-commit:
+  parallel: true
+  jobs:
+    # rpc_elixir is the published library. Its formatting and lint are gated.
+    - name: rpc-format
+      root: "apps/rpc_elixir/"
+      glob: "*.{ex,exs}"
+      run: mix format {staged_files}
+      stage_fixed: true
+
+    - name: rpc-credo
+      root: "apps/rpc_elixir/"
+      glob: "*.{ex,exs}"
+      run: mix credo --strict
+
+    # TS format + lint via Biome (repo-wide config in biome.json), file-scoped
+    # to the staged files. Type-checking is separate (tsc, below) since Biome
+    # does not type-check. No Elixir formatter is configured for the example
+    # server, so it is not gated here.
+    - name: ts-format
+      glob: "*.{ts,mts,tsx,js,jsx}"
+      run: npx biome format --write --no-errors-on-unmatched {staged_files}
+      stage_fixed: true
+
+    - name: ts-lint
+      glob: "*.{ts,mts,tsx,js,jsx}"
+      run: npx biome lint --no-errors-on-unmatched {staged_files}
+
+    - name: client-typecheck
+      root: "packages/client/"
+      glob: "*.{ts,tsx}"
+      run: npm run typecheck
+
+    - name: example-client-typecheck
+      root: "examples/basic/client/"
+      glob: "*.{ts,tsx}"
+      run: npm run typecheck
+
+# Library test suite runs before a push (the full pre-commit gate would be too
+# slow per-commit). CI is the authoritative gate. This is a fast local catch.
+pre-push:
+  jobs:
+    - name: rpc-test
+      root: "apps/rpc_elixir/"
+      run: mix test

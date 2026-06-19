@@ -1,0 +1,66 @@
+# ---------- Elixir / Mix ----------
+**/_build/
+**/cover/
+**/deps/
+**/doc/
+/.fetch
+erl_crash.dump
+*.ez
+*.beam
+/config/*.secret.exs
+**/.elixir_ls/
+**/.lexical/
+
+# Stray MIX_HOME sandbox dir created when MIX_HOME is unset/misconfigured
+**/undefined/
+
+# Hex package build artifacts
+*.tar
+
+# Phoenix / LiveView
+**/priv/static/assets/
+**/priv/static/cache_manifest.json
+
+# SQLite dev DBs
+*.db
+*.db-shm
+*.db-wal
+
+# ---------- Node / TypeScript ----------
+**/node_modules/
+**/dist/
+**/build/
+.next/
+.svelte-kit/
+.turbo/
+.vite/
+*.tsbuildinfo
+
+# VitePress (docs site), build output is covered by **/dist/ above
+**/.vitepress/cache/
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ---------- Environment ----------
+.env
+.env.*
+!.env.example
+
+# ---------- Editor / OS ----------
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+*.iml
+
+# ---------- Claude / tooling ----------
+.claude/settings.local.json
+.claude/plans/
+.claude/*.md

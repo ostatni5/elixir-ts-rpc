@@ -1,0 +1,54 @@
+{
+  "name": "@elixir-ts-rpc/client",
+  "version": "0.0.1",
+  "description": "Typed RPC client for elixir-ts-rpc, a type-safe RPC bridge between Elixir/Phoenix servers and TypeScript.",
+  "keywords": [
+    "rpc",
+    "elixir",
+    "phoenix",
+    "typescript",
+    "type-safe",
+    "codegen",
+    "client"
+  ],
+  "private": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "license": "MIT",
+  "sideEffects": false,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ostatni5/elixir-ts-rpc.git",
+    "directory": "packages/client"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "prepack": "npm run build",
+    "prepublishOnly": "npm run build"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "typescript": "^5.5",
+    "vitest": "^2.0"
+  }
+}
