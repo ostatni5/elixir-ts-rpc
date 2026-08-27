@@ -3,38 +3,40 @@ defmodule RpcElixir.Dispatcher do
   Core dispatch pipeline: lookup → middleware → validate input → invoke handler →
   validate output → serialize.
 
-  Every transport (HTTP Plug, in-process caller) funnels through `dispatch/4`,
-  which threads a `%RpcElixir.Resolution{}` through the procedure's middleware
-  chain and the inner pipeline. The returned resolution carries the final
-  outcome on its `:result` field, so middleware that wraps `dispatch/4` can
+  Every transport funnels through `dispatch/4` — the HTTP Plug and in-process
+  callers alike. It threads a `%RpcElixir.Resolution{}` through the procedure's
+  middleware chain and the inner pipeline. The returned resolution carries the
+  outcome on its `:result` field. So middleware that wraps `dispatch/4` can
   observe and transform results uniformly.
 
   ## Typed handler errors
 
-  When a handler returns `{:error, reason}`, the dispatcher promotes `reason`
-  to a top-level `%RpcError{}`:
+  A handler returns `{:error, reason}`. The dispatcher promotes `reason` to a
+  top-level `%RpcError{}` and stamps `source: :domain` unless the handler set
+  one. Promotion never sets `:status`, except in the last case below.
 
-    - `reason` is an atom: `code = reason`, `message = Atom.to_string(reason)`,
-      `details = nil`. HTTP status is derived by the transport from
-      `RpcElixir.RpcError`'s framework status map (falling back to a generic
-      status).
-    - `reason` is a plain map (not a struct) with `:code` (atom): `code =
-      reason.code`, `message = reason[:message] || Atom.to_string(code)`,
-      `details = reason` minus `:code` and `:message` (or `nil` if empty).
-      HTTP status is derived by the transport from `RpcElixir.RpcError`'s
-      framework status map (falling back to a generic status).
+  The transport derives the status for any promoted error whose `:status` is
+  `nil`. It reads the framework status map in `RpcElixir.RpcError`. Unknown
+  codes fall back to a generic status. Return `%RpcError{status: 422}` from a
+  handler to choose the status yourself.
+
+    - `reason` is an atom: `code = reason`,
+      `message = Atom.to_string(reason)`, `details = nil`.
+    - `reason` is a plain map (not a struct) with an atom `:code`:
+      `code = reason.code`, `message = reason[:message] || Atom.to_string(code)`,
+      `details = reason` minus `:code` and `:message`, or `nil` if empty.
     - `reason` is already an `%RpcError{}` with a non-nil `:source`: passed
-      through unchanged. If `:source` is `nil`, it is stamped with
-      `source: :domain` before being returned.
-    - Anything else (structs, tuples, keyword lists, lists, …): wrapped as
+      through unchanged. A `nil` `:source` is stamped `source: :domain`.
+    - Anything else — structs, tuples, keyword lists, lists: wrapped as
       `%RpcError{code: :handler_error, details: %{kind: :error, reason:
-      inspect(reason)}}` with status 500 (the default status for
-      `:handler_error` in `RpcElixir.RpcError.framework_errors/0`). These are
-      framework-level "handler returned something unexpected" cases.
+      inspect(reason)}}` at status 500. That is the `:handler_error` default in
+      `RpcElixir.RpcError.framework_errors/0`. These are framework-level
+      "handler returned something unexpected" cases.
 
-  This contract matches the JS `Error` shape on the TypeScript client:
-  `err.code`, `err.message`, and `err.details` are all populated for typed
-  errors, and `err.message` shows up in stack traces and `console.error`.
+  This contract matches the JS `Error` shape. On the TypeScript client, a typed
+  error populates `err.code`, `err.message`, and `err.details`. `err.message`
+  shows up in stack traces and `console.error`. See
+  [Handling errors](errors.md) for the user-facing guide.
   """
 
   alias RpcElixir.{Resolution, RpcError, Types}
@@ -48,11 +50,10 @@ defmodule RpcElixir.Dispatcher do
   Dispatches a procedure call against `router`, returning the resolution with
   `:result` populated.
 
-  - If the input resolution is already halted, it is returned as-is.
-  - If the procedure path is unknown, the result is set to a
-    `:procedure_not_found` `RpcError` without invoking middleware.
-  - Otherwise, the procedure's middleware chain runs around the inner
-    pipeline. Any middleware may halt the resolution to short-circuit.
+  - An already-halted resolution is returned as-is.
+  - An unknown path yields a `:procedure_not_found` `RpcError`. No middleware runs.
+  - Otherwise the middleware chain wraps the inner pipeline. Any middleware may
+    halt the resolution to short-circuit.
   """
   @spec dispatch(module(), String.t(), map(), Resolution.t()) :: Resolution.t()
   def dispatch(_router, _path, _raw_input, %Resolution{state: :halted} = resolution) do
@@ -204,7 +205,7 @@ defmodule RpcElixir.Dispatcher do
         {:error,
          RpcError.framework(
            :output_validation_failed,
-           "output validation failed, this is a server bug",
+           "output validation failed — this is a server bug",
            field_errors
          )}
     end

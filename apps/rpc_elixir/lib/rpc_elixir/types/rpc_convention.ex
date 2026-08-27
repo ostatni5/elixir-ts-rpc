@@ -9,7 +9,7 @@ defmodule RpcElixir.Types.RpcConvention do
     ast
     |> Walker.collect_union_variants()
     # `Code.Typespec.spec_to_quoted/2` emits 2-tuples as `{:{}, _, [a, b]}` while
-    # `quote do: {:ok, T}` produces a plain 2-tuple, normalize so both sources match.
+    # `quote do: {:ok, T}` produces a plain 2-tuple — normalize so both sources match.
     |> Enum.map(&normalize_tuple/1)
     |> Enum.reduce({nil, nil}, &accumulate_variant/2)
     |> wrap_result()

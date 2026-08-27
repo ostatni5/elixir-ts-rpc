@@ -2,27 +2,31 @@ defmodule RpcElixir.Context do
   @moduledoc """
   Request-scoped context threaded through middleware and into handlers.
 
-  The transport layer (Plug, Channels) builds a `%Context{}` from the
-  authentication mechanism it uses and hands it to the dispatcher.
-  Middleware may read or augment the context via the surrounding
-  `%RpcElixir.Resolution{}`. Handlers receive the final context as their
-  second argument (after the input).
+  The transport builds a `%Context{}` and passes it to the dispatcher.
+  Middleware may read or augment it through the surrounding
+  `%RpcElixir.Resolution{}`. Handlers receive the final context as their second
+  argument.
+
+  `RpcElixir.Plug` builds it from the optional `:ctx_builder` callback, then
+  always overwrites `:req`. It never sets `:conn` or `:socket`. Those stay
+  `nil` unless your own `:ctx_builder` fills them.
 
   ## The `:req` field
 
-  When a request arrives via the HTTP Plug transport, `:req` is populated with
-  a plain map carrying transport-level request metadata:
+  The HTTP Plug transport fills `:req` with transport-level request metadata.
+  In-process calls via `RpcElixir.call/4` leave it `nil`.
 
       %{
         cookies: %{String.t() => String.t()},   # parsed request cookies
         headers: [{String.t(), String.t()}],     # raw header list from the conn
         remote_ip: :inet.ip_address() | nil,     # client IP
         method: String.t(),                      # always "POST" for v1
-        path: String.t(),                        # request path used for dispatch
-        session: map()                          # session data, empty map if Plug.Session not configured
+        path: String.t(),                        # full request path, prefix included
+        session: map()                          # string keys; empty map if the session was not fetched
       }
 
-  When called in-process via `RpcElixir.call/4`, `:req` is `nil`.
+  Session keys are strings, because Plug normalizes them. Read them as
+  `ctx.req.session["user_id"]`, not `ctx.req.session[:user_id]`.
   """
 
   @typedoc "Transport-level request metadata, populated by the Plug adapter."

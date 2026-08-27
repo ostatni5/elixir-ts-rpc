@@ -15,7 +15,7 @@ export type RpcErrorPayload = {
 
 /**
  * Codes the client itself synthesizes for failures that never reach the server's
- * error envelope: a closed set the library owns (unlike server-domain codes,
+ * error envelope — a closed set the library owns (unlike server-domain codes,
  * which are open). Minted in `fetch.ts`, surfaced as a typed union by
  * `isTransportError`.
  */
@@ -50,7 +50,7 @@ export class RpcError<
  * Source-pinned views of {@link RpcError}, paired with the codegen output: a
  * procedure's generated error union is `DomainError<…> | MiddlewareError<…>`, so
  * a `source` check (or an `isDomainError`/`isMiddlewareError` guard) narrows the
- * union, and thus `code`/`details`, at compile time.
+ * union — and thus `code`/`details` — at compile time.
  */
 export type DomainError<Code extends string = string, Details = unknown> = RpcError<
   Code,

@@ -1,27 +1,28 @@
 defmodule RpcElixir.Types do
   @moduledoc """
-  Type system for RPC procedure input/output specs.
+  Type system for RPC procedure input and output specs.
 
-  Three entry points: `resolve/1` normalizes a shorthand spec into the internal
-  IR map, `validate/2` checks untrusted input against a spec, and `serialize/2`
-  prepares handler output for JSON encoding.
+  Three entry points. `resolve/1` normalizes a shorthand spec into the internal
+  IR map. `validate/2` checks untrusted input against a spec. `serialize/2`
+  prepares handler output for JSON encoding. See
+  [Supported types](supported-types.md) for the type-mapping tables.
 
   ## Atom keys in validated input
 
-  After a successful `validate/2` call, object values are returned with
-  **atom keys** (e.g. `%{id: "abc"}`), not string keys. Handler functions
-  therefore receive atom-keyed maps and should pattern-match accordingly:
+  A successful `validate/2` returns object values with **atom keys**, e.g.
+  `%{id: "abc"}`. Handlers therefore receive atom-keyed maps. Pattern-match
+  accordingly:
 
-      def get(%{id: id}, _ctx), do: ...   # correct
-      def get(%{"id" => id}, _ctx), do: ... # wrong, key will be missing
+      def get(%{id: id}, _ctx), do: ...     # correct
+      def get(%{"id" => id}, _ctx), do: ... # wrong — key will be missing
   """
 
-  @typedoc "Internal IR map used throughout the type system. Always has a `kind` string key."
+  @typedoc "Internal IR map used across the type system. It always has a `kind` string key."
   @type internal_spec :: %{optional(atom()) => term(), kind: String.t()}
 
   @temporal_kinds RpcElixir.Types.Builtins.kinds() -- ["decimal"]
 
-  @doc "Converts a shorthand spec term (atom, tagged tuple, or map) to an `internal_spec` IR map."
+  @doc "Converts a shorthand spec term to an `internal_spec` IR map. Accepts an atom, tagged tuple, or map."
   @spec resolve(
           :string
           | :integer
@@ -51,20 +52,20 @@ defmodule RpcElixir.Types do
 
   def resolve(other) do
     raise ArgumentError,
-          "unsupported inline spec: #{inspect(other)}, " <>
+          "unsupported inline spec: #{inspect(other)} — " <>
             "use :string, :integer, :float, :boolean, {:optional, t}, {:nullable, t}, " <>
             "{:list, t}, or a plain map for object shapes"
   end
 
   @doc """
-  Validates user-supplied `value` against `spec`, returning `{:ok, coerced}` or `{:error, tree}`.
+  Validates user-supplied `value` against `spec`. Returns `{:ok, coerced}` or
+  `{:error, tree}`.
 
-  `spec` may be a shorthand spec term (atom, tagged tuple, or map, see `resolve/1`)
-  or an already-resolved IR map. Intended for untrusted input (decoded JSON), so
-  contract violations come back as error trees rather than raises.
-
-  Object values in the returned `{:ok, coerced}` tuple always have **atom keys**. See the
-  module doc for details.
+  `spec` may be a shorthand spec term or an already-resolved IR map. See
+  `resolve/1` for the shorthand forms. This is for untrusted input, such as
+  decoded JSON. So contract violations come back as error trees, not raises.
+  Object values in `{:ok, coerced}` always have **atom keys**. See the module
+  doc.
   """
   @spec validate(term(), term()) :: {:ok, term()} | {:error, map()}
   def validate(spec, value), do: do_validate(resolve(spec), value)
@@ -72,10 +73,10 @@ defmodule RpcElixir.Types do
   @doc """
   Serializes a server-produced `value` against `spec` into a JSON-encodable shape.
 
-  `spec` may be a shorthand spec term (atom, tagged tuple, or map, see `resolve/1`)
-  or an already-resolved IR map. Assumes `value` already conforms to `spec` (e.g. fresh
-  from a handler) and **raises** on contract violations such as missing required fields.
-  These indicate programmer error, not bad input.
+  `spec` may be a shorthand spec term or an already-resolved IR map. See
+  `resolve/1`. It assumes `value` already conforms, e.g. fresh from a handler.
+  It **raises** on contract violations such as missing required fields. Those
+  indicate programmer error, not bad input.
   """
   @spec serialize(term(), term()) :: term()
   def serialize(spec, value), do: do_serialize(resolve(spec), value)
@@ -198,7 +199,7 @@ defmodule RpcElixir.Types do
   end
 
   # A spec value present in `values` is normally a known atom, but untrusted input
-  # could reach an enum whose atom was never materialized. Rescue keeps validate/2
+  # could reach an enum whose atom was never materialized; rescue keeps validate/2
   # total (returns an error tree) instead of raising on the caller.
   defp to_existing_atom_or_error(v, values) do
     {:ok, String.to_existing_atom(v)}
@@ -208,7 +209,7 @@ defmodule RpcElixir.Types do
 
   defp leaf_error(msg), do: {:error, %{"_" => [msg]}}
 
-  # Reached only after `v` failed wire validation. Accepting it must not become an
+  # Reached only after `v` failed wire validation; accepting it must not become an
   # input-validation bypass. JSON never decodes to a struct, so a struct can only be
   # an in-process domain value and is safe. Plain maps/lists are the JSON-shaped
   # bypass vectors and are rejected. Scalars are deferred to the module's `serialize/1`.

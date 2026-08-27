@@ -1,78 +1,103 @@
 # Using the client
 
-The TypeScript side is the [`@elixir-ts-rpc/client`](https://www.npmjs.com/package/@elixir-ts-rpc/client)
-package plus the `rpc.gen.ts` file [codegen](/guide/codegen-workflow) emits from
-your `@spec`s. This page walks the runtime client and its features.
+The TypeScript side is [`@elixir-ts-rpc/client`](https://www.npmjs.com/package/@elixir-ts-rpc/client)
+plus the `rpc.gen.ts` that [codegen](/guide/codegen-workflow) emits from your
+`@spec`s.
 
-::: tip Generated vs. runtime entry point
-`@elixir-ts-rpc/client` ships the runtime. That is `createClient`, the `RpcError`
-class, the error guards, and the interceptor types. It does **not** ship
-per-procedure types. Codegen wraps `createClient` in a typed
-**`createRpcClient`** factory and writes it into your `rpc.gen.ts` alongside every
-input/output/error type. So you import `createRpcClient` from your own generated
-file, and the guards/types from the package.
-:::
+The package ships the runtime: `createClient`, `RpcError`, guards, interceptor
+types. Codegen wraps `createClient` in a typed `createRpcClient` factory. That
+factory carries every input, output, and error type. Import `createRpcClient`
+from `rpc.gen.ts`. Import the guards from the package.
+
+Every TypeScript sample on this page is type-checked against a real generated
+client at build time. Hover any identifier to see its resolved type.
 
 ## Creating a client
 
-```ts
+```ts twoslash
 import { createRpcClient } from "./rpc.gen";
 
 const client = createRpcClient({ baseUrl: "/rpc" });
 ```
 
-`createRpcClient` and the underlying `createClient` accept:
+`createRpcClient` and the underlying `createClient` accept these options. The
+package exports the type as `ClientOptions`.
 
 | Option         | Type                        | Default            | Notes                                           |
 | -------------- | --------------------------- | ------------------ | ----------------------------------------------- |
-| `baseUrl`      | `string`                    | -                  | Where the RPC plug is mounted (no query string) |
-| `headers`      | `HeadersInit` or a thunk    | `{}`               | Static, or resolved before each call            |
+| `baseUrl`      | `string`                    | —                  | Where the RPC plug is mounted (no query string) |
+| `headers`      | `HeadersInit` or a thunk    | `{}`               | Fixed, or resolved before each call             |
 | `credentials`  | `RequestCredentials`        | `"same-origin"`    | `"include"` for cross-origin cookies            |
-| `signal`       | `AbortSignal`               | -                  | Client-wide abort signal                        |
-| `fetch`        | `FetchLike`                 | `globalThis.fetch` | Inject a custom fetch (SSR, tests)              |
-| `onError`      | `(error, op) => void`       | -                  | Cross-cutting failure observer                  |
-| `interceptors` | `readonly RpcInterceptor[]` | `[]`               | Ordered call-wrapping chain                     |
+| `signal`       | `AbortSignal`               | —                  | Client-wide abort signal                        |
+| `fetch`        | `FetchLike`                 | `globalThis.fetch` | Pass your own fetch (SSR, tests)                |
+| `onError`      | `(error, op) => void`       | —                  | Watches failed calls, `RpcError` only           |
+| `interceptors` | `readonly RpcInterceptor[]` | `[]`               | Ordered chain that wraps each call              |
 
 ## Making calls
 
-Generated methods are namespaced by procedure and fully typed. The input, output,
-and error shapes all come from your `@spec`:
+Methods are namespaced. Their types come from your `@spec`. A second `init`
+argument is optional. Its type is `CallInit`. It holds only
+`{ signal, headers }`. The signal is combined with the client signal. So either
+one aborts the call. The headers are merged key by key over the client headers.
+The options `credentials`, `fetch`, `onError`, and `interceptors` are
+client-wide only.
 
-```ts
-const user = await client.users.get({ id: 1 });
-//    ^? { id: number; name: string }
+```ts twoslash
+import { createRpcClient } from "./rpc.gen";
+const client = createRpcClient({ baseUrl: "/rpc" });
+const controller = new AbortController();
+// ---cut---
+const user = await client.users.get({ id: "u_1" });
+
+const scoped = await client.users.get({ id: "u_1" }, { signal: controller.signal });
+//    ^?
 ```
 
-Each method takes an optional second `init` argument for per-call overrides, a
-`signal` and extra `headers`:
+## Jumping to the handler
 
-```ts
-const user = await client.users.get({ id: 1 }, { signal: controller.signal });
-```
+Every method carries a JSDoc link to the Elixir line it was generated from,
+along with the handler MFA. Hover the call in your editor to see it, then follow
+it to land on the function. Nothing is wired up on your side. It ships in
+`rpc.gen.ts`. See [How it works](/guide/how-it-works#_4-generate-the-typescript-client).
 
 ## Catching typed errors
 
-Failures are thrown as `RpcError`. Every `RpcError` carries a `code`, a `source`
-of `"transport" | "framework" | "middleware" | "domain"`, a `message` that falls
-back to the `code`, optional `details`, and the HTTP `status`. There are three
-ways to narrow a caught value, from most to least specific.
+A failure throws an `RpcError`. It carries `code`, `source`
+(`"transport" | "framework" | "middleware" | "domain"`), `message`, an optional
+`details`, and a `status`. The status is the response's HTTP status. It is `0`
+when the call never reached the server. When there is no message, `message` holds
+the `code`.
 
-**Per-procedure `.isError`: sound, narrows to the procedure's declared error union.**
-Each generated method carries an `.isError` guard that checks `e.code` against
-that procedure's declared codes at runtime and narrows to its generated error
-alias. Because it matches the declared codes, it excludes the client-synthesized
-transport codes. Handle those separately. The declared union also includes any
-middleware arms the procedure can fail with, such as `unauthorized`, which you
-typically leave to a central `onError` rather than the per-call `switch`.
+Four guards narrow a caught value:
 
-```ts
+| Guard                        | Narrows to                                    | Use when                              |
+| ---------------------------- | --------------------------------------------- | ------------------------------------- |
+| `client.x.y.isError`         | that procedure's declared error union          | at a call site, handling domain logic |
+| `isTransportError`           | `"aborted" \| "network_error" \| "transport_error"` | the client minted the error itself |
+| `isDomainError`, `isMiddlewareError`, `isFrameworkError` | by `e.source`      | in `onError` or an interceptor         |
+| `isRpcError`                 | `RpcError`, with `code` as plain `string`      | you do not care which kind it is      |
+
+The per-procedure guard checks `e.code` at runtime. It compares it to the codes
+that procedure declares. Transport codes that the client makes itself are not in
+that list. Handle those codes separately. The package exports those three codes
+as the readonly tuple `TRANSPORT_ERROR_CODES`.
+
+The three codes differ in status. `aborted` and `network_error` mean the request
+never reached the server. Their `status` is `0`. `transport_error` is minted
+after a response arrives. It carries that response's real HTTP status.
+
+```ts twoslash
+import { createRpcClient } from "./rpc.gen";
+const client = createRpcClient({ baseUrl: "/rpc" });
+const id = "u_1";
+const email = "new@example.com";
+// ---cut---
 import { isTransportError } from "@elixir-ts-rpc/client";
 
 try {
   await client.users.update({ id, email });
 } catch (e) {
   if (client.users.update.isError(e)) {
-    // e is narrowed to the procedure's error union. `e.code` is the declared set.
     switch (e.code) {
       case "email_taken":
         console.error("email already in use:", e.details);
@@ -82,7 +107,6 @@ try {
         break;
     }
   } else if (isTransportError(e)) {
-    // e.code is "network_error" | "transport_error" | "aborted"
     console.error(`transport failure (${e.code}):`, e.message);
   } else {
     throw e;
@@ -90,67 +114,47 @@ try {
 }
 ```
 
-**`isTransportError`: sound, narrows to the transport union.** It catches only the
-codes the client synthesizes when a call never produced a server error envelope:
-`aborted`, `network_error`, `transport_error`. You get a literal `code` union you
-can `switch` exhaustively.
+A declared union can also include middleware codes such as `unauthorized`. Leave
+those to a central `onError`. With `isRpcError`, always add a `default` branch.
 
-**`isRpcError`: broad, narrows to `RpcError`.** When you don't need to
-distinguish domain from transport, this narrows to `RpcError` with `e.code` as a
-plain `string`. Always include a `default` branch.
-
-```ts
-import { isRpcError } from "@elixir-ts-rpc/client";
-
-try {
-  await client.users.update({ id, email });
-} catch (e) {
-  if (isRpcError(e)) {
-    console.error(`rpc failed (${e.code}):`, e.message);
-  } else {
-    throw e;
-  }
-}
-```
-
-For cross-cutting handling there are also **source guards**:
-`isDomainError`, `isMiddlewareError`, and `isFrameworkError`. They narrow by
-`e.source` rather than by a specific procedure's codes. They're most useful in
-`onError` and interceptors, where you don't have a single procedure in hand.
-
-::: warning `details` is best-effort
-The generated detail type reflects what the handler's `@spec` *declares*, but at
-runtime `details` may be `undefined`. Transport errors never carry it, and a
-server error may omit it. Always guard access with `e.details?.field`. Note also
-that everything in a typed error's `message`/`details` is sent to the client
-verbatim. See [Supported types](/guide/supported-types) and the
-[full type reference](https://github.com/ostatni5/elixir-ts-rpc/blob/main/apps/rpc_elixir/docs/supported-types.md)
-for the handler-side caveats.
+::: warning `details` may be undefined at runtime
+The generated detail type only shows what the `@spec` declares. Transport errors
+never carry `details`. A server error may leave it out. So read it as
+`e.details?.field`.
 :::
+
+Handler-side rules: [Errors](/guide/errors).
 
 ## Aborting requests
 
-Pass an `AbortSignal` per call, client-wide, or both. They compose, so either
-firing cancels the call:
+You can pass a signal per call, client-wide, or both. If either one fires, the
+call is cancelled.
 
-```ts
+```ts twoslash
+import { createRpcClient } from "./rpc.gen";
+const client = createRpcClient({ baseUrl: "/rpc" });
+// ---cut---
 const controller = new AbortController();
 setTimeout(() => controller.abort(), 5_000);
 
 const result = await client.users.list({}, { signal: controller.signal });
 ```
 
-An aborted call rejects with an `RpcError` whose `code` is `"aborted"`. By
-design, aborts are treated as cancellations, not failures. They never reach the
-`onError` observer.
+An aborted call rejects with `code: "aborted"`. An abort is a cancellation, not a
+failure. That code does not reach `onError`. An abort can also land while the
+response body is read. That becomes `transport_error`, and it does reach
+`onError`.
 
 ## Headers and credentials
 
-`headers` can be static, or a thunk resolved before each call. Use the thunk to
-attach a token that may change between calls. For cross-origin requests that
-need cookies, set `credentials: "include"`:
+`headers` is a fixed object or a thunk. A thunk runs before each call. Use a
+thunk for a token that changes. Cross-origin cookies need
+`credentials: "include"`.
 
-```ts
+```ts twoslash
+import { createRpcClient } from "./rpc.gen";
+declare function getToken(): Promise<string>;
+// ---cut---
 const client = createRpcClient({
   baseUrl: "https://api.example.com/rpc",
   credentials: "include", // default is "same-origin"
@@ -162,13 +166,14 @@ const client = createRpcClient({
 
 ## Central error handling
 
-Pass an `onError` observer to handle failures cross-cuttingly, such as hard
-redirects, logging, and telemetry. It fires once per failed call with the
-`RpcError` and the operation that produced it, and you filter by source. It is
-**side-effect only**. The original error always still rejects, so per-call
-`.isError` handling keeps working.
+`onError` watches failures in one place: redirects, logging, telemetry. It runs
+once per failed call and only does side effects. The call still rejects with the
+original error. So per-call `.isError` handling keeps working.
 
-```ts
+```ts twoslash
+import { createRpcClient } from "./rpc.gen";
+declare const loginUrl: string;
+// ---cut---
 import { isDomainError, isMiddlewareError } from "@elixir-ts-rpc/client";
 
 const client = createRpcClient({
@@ -181,25 +186,29 @@ const client = createRpcClient({
 });
 ```
 
-::: warning A few sharp edges
-Aborts never reach `onError`. Domain errors do, so filter them out unless you want
-global logging. The hook is invoked synchronously and not awaited. A synchronous
-throw is logged and discarded, but an `async` hook's rejection escapes as an
-unhandled rejection, so handle your own errors if you do async work. And `op.input`
-is the raw request payload, which may contain credentials or PII, so redact before
-logging.
-:::
+- It fires only when the rejection is an `RpcError`. An interceptor may throw a
+  plain `Error`. Then the call rejects without firing it.
+- The `"aborted"` code does not reach `onError`. Domain errors do reach it.
+  Filter them out unless you want global logging.
+- The hook is called synchronously and is not awaited. A synchronous throw is
+  logged and dropped. If an `async` hook rejects, nothing handles that rejection.
+- `op.input` is the raw request payload. It may hold credentials or personal
+  data. Redact it before you log it.
+- It fires only after the whole interceptor chain has run. A call that an
+  interceptor recovers never reaches it.
 
 ## Interceptors
 
-Where `onError` only observes, an **interceptor** controls the call. Each one
-wraps the request between header resolution and the transport, receiving the
-request and `next`, the rest of the chain. It is awaited, so it can mutate the
-request and inspect the result. It can also catch a failure, `await` async work,
-and call `next` again to **replay** the call. The first interceptor in the
-array is outermost.
+An interceptor controls the call. `onError` only watches it. Each interceptor
+wraps the request. It runs after headers resolve and before the transport. It
+gets the request and `next`. Calling `next` runs the interceptors after it.
+Interceptors are awaited. You can change the request. You can inspect the
+result. You can also catch a failure, await async work, and replay via `next`.
+The first interceptor in the array wraps all the others.
 
-```ts
+```ts twoslash
+import { createRpcClient } from "./rpc.gen";
+// ---cut---
 import type { RpcInterceptor } from "@elixir-ts-rpc/client";
 
 const logging: RpcInterceptor = async (req, next) => {
@@ -212,22 +221,22 @@ const logging: RpcInterceptor = async (req, next) => {
 const client = createRpcClient({ baseUrl: "/rpc", interceptors: [logging] });
 ```
 
-`onError` fires only after the chain is exhausted, so a call an interceptor
-recovers by replaying successfully never reaches it.
-
 ### Auth refresh, with single-flight
 
-The `headers` thunk is proactive and attaches a token before each call. For a
-token that expires mid-flight, an interceptor catches the `401`, refreshes once
-across all in-flight calls, and replays each with the new token. Set the
-`Authorization` header **inside the interceptor** rather than the `headers` thunk,
-so the replay picks up the fresh token rather than the stale one baked into the
-original request.
+The `headers` thunk runs ahead of the call. It cannot help when a token expires
+mid-flight. An interceptor can. It catches the `401`, refreshes once for all
+in-flight calls, and replays with the new token. Set `Authorization` inside the
+interceptor, not in the `headers` thunk. Only then does the replay use the fresh
+token.
 
-```ts
+```ts twoslash
+import { createRpcClient } from "./rpc.gen";
+declare function getToken(): string;
+declare function refreshToken(): Promise<void>;
+// ---cut---
 import { isMiddlewareError, type RpcInterceptor } from "@elixir-ts-rpc/client";
 
-let refreshing: Promise<void> | null = null; // single-flight: one refresh, many waiters
+let refreshing: Promise<void> | null = null; // one refresh, many waiters
 
 const authRefresh: RpcInterceptor = async (req, next) => {
   req.headers.set("Authorization", `Bearer ${getToken()}`);
@@ -245,27 +254,57 @@ const authRefresh: RpcInterceptor = async (req, next) => {
 const client = createRpcClient({ baseUrl: "/rpc", interceptors: [authRefresh] });
 ```
 
-Guard against a refresh loop in your own code. Cap to one replay, or have
-`refreshToken` reject when the refresh token itself is dead. The interceptor
-rethrows a second `401` to `onError` and the call site rather than retry forever.
-For **cookie/session** auth there's no client-held token to refresh. Let the
-server manage session lifetime and, on a `401`, send the user to log in rather
-than attempting an in-band refresh. The [Phoenix example](/guide/examples) shows
-a logging interceptor and source-filtered `onError` on a session-auth app.
+Limit how many times you replay. Or reject in `refreshToken` once the refresh
+token is dead. Otherwise a second `401` loops forever and never reaches the call
+site.
+
+With cookie or session auth, the client holds no token to refresh. Let the server
+own the session lifetime. On a `401`, send the user to log in. The
+[Phoenix example](/guide/examples) uses session auth. It shows a logging
+interceptor and an `onError` that filters by source.
 
 ## Raw untyped client
 
-If you need to call procedures without generated types, `createClient` returns a
-low-level `client.call(procedure, input, init?)` method:
+`createClient` gives you a low-level `client.call(procedure, input, init?)`. Use
+it for procedures that have no generated types:
 
-```ts
+```ts twoslash
 import { createClient } from "@elixir-ts-rpc/client";
 
 const client = createClient({ baseUrl: "/rpc" });
-const me = await client.call("auth.me", {});
+const me = await client.call<Record<string, never>, { id: number }>("auth.me", {});
 ```
 
-::: tip Canonical reference
-This page mirrors the package README, which is the always-current source of
-truth: [`@elixir-ts-rpc/client` README →](https://github.com/ostatni5/elixir-ts-rpc/blob/main/packages/client/README.md)
-:::
+`call<I, O>` takes type arguments. Without them the result is `unknown`.
+
+`rpcMethod` writes a typed method by hand for one such procedure. You pass the
+client, the procedure name, and its declared codes. You get an
+`RpcMethod<I, O, E>`. It is callable as `(input, init?)` and carries `.isError`.
+That guard matches `e.code` against the codes you passed.
+
+```ts twoslash
+import { createClient, type RpcError, rpcMethod } from "@elixir-ts-rpc/client";
+
+const client = createClient({ baseUrl: "/rpc" });
+
+const getUser = rpcMethod<{ id: number }, { name: string }, RpcError<"not_found">>(
+  client,
+  "users.get",
+  ["not_found"],
+);
+
+const user = await getUser({ id: 1 });
+```
+
+## Building your own framework adapter
+
+The client is framework-free. Three exports let you wrap it for another library:
+
+- `buildProxy(client, makeLeaf)` swaps every procedure for a leaf you define.
+- `deriveKey(path, input?)` builds the key `[...path, input]`. With no input it
+  builds `[...path]`.
+- `isRpcMethod(value)` checks for a generated procedure leaf.
+
+`buildProxy` returns `unknown`. So an adapter is not type-safe on its own. Your
+adapter must declare its own mapped type over the client. It casts the result to
+that type. That is how `@elixir-ts-rpc/react` keeps its types.

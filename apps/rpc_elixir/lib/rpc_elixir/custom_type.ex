@@ -1,83 +1,62 @@
 defmodule RpcElixir.CustomType do
   @moduledoc """
-  Escape hatch for teaching elixir-ts-rpc how to handle custom or third-party types.
+  Teaches the library about a type it does not know.
 
-  Implement this behaviour on any module whose `.t()` you want to use in
-  procedure specs but that the library doesn't know about:
+  Implement it on any module whose `.t()` appears in a spec. Then use
+  `Mod.t()` in your specs as normal:
 
-      defmodule MyApp.Money do
-        @behaviour RpcElixir.CustomType
+      @spec create(%{amount: MyApp.Money.t()}, ctx()) :: {:ok, %{result: MyApp.Money.t()}}
 
-        @impl RpcElixir.CustomType
-        def wire_spec, do: %{kind: "primitive", type: "string"}
+  `c:wire_spec/0` and `c:serialize/1` are required. `c:deserialize/1` and
+  `c:ts_type/0` are optional.
 
-        @impl RpcElixir.CustomType
-        def serialize(%__MODULE__{amount: a, currency: c}), do: "\#{a} \#{c}"
-      end
-
-  Then use it in specs as normal:
-
-      @spec create(input :: %{amount: MyApp.Money.t()}) :: {:ok, %{result: MyApp.Money.t()}}
-
-  `wire_spec/0` must return an already-resolved internal spec map, the same
-  shape that `RpcElixir.Types.resolve/1` returns. The inner spec determines the
-  TypeScript type that the codegen emits.
-
-  `serialize/1` receives the Elixir value and must return something that can
-  be JSON-encoded (a string, number, boolean, map, list, or nil).
-
-  The optional `deserialize/1` callback is the input dual of `serialize/1`: it
-  receives the wire value (already validated against `wire_spec/0`) and returns
-  `{:ok, domain_value}` on success or `{:error, reason}` to reject malformed
-  input. When absent, the wire-validated value passes through unchanged.
-
-  ## Branded TS types (precision-honest)
-
-  When the wire format is a string or number that the client must NOT auto-parse
-  (e.g. arbitrary-precision numbers, 64-bit ids, epoch-millisecond timestamps),
-  implement the optional `c:ts_type/0` callback. The codegen will emit a branded TS
-  type alias instead of the inner wire type, forcing callers to choose their own
-  parser:
-
-      defmodule MyApp.Int64 do
-        @behaviour RpcElixir.CustomType
-
-        @impl RpcElixir.CustomType
-        def wire_spec, do: %{kind: "primitive", type: "string"}
-
-        @impl RpcElixir.CustomType
-        def serialize(int) when is_integer(int), do: Integer.to_string(int)
-
-        @impl RpcElixir.CustomType
-        def ts_type, do: "Int64String"
-      end
-
-  Branded aliases are emitted as `string & { readonly __brand: "Name" }` for a
-  string wire or `number & { readonly __brand: "Name" }` for an integer/float
-  wire (where `Name` is the `c:ts_type/0` value), so `c:ts_type/0` requires
-  `wire_spec/0` to resolve to `%{kind: "primitive", type: "string" | "integer" | "float"}`
-  because any other wire shape would make the brand lie about its base type, and the
-  codegen raises. The returned name must be a valid TS identifier and must not
-  collide with a built-in brand, a generated interface, or a reserved TypeScript
-  type name.
-
-  ## Built-in custom types and router aliases
-
-  `RpcElixir.UnixMillis` ships as a branded number custom type: a `DateTime`
-  serialized as epoch milliseconds, typed in TypeScript as the `EpochMillis`
-  brand. Use it per-field as `RpcElixir.UnixMillis.t()`, or remap every
-  `DateTime` in a router at once with the `wire_aliases` option:
-
-      use RpcElixir.Router, wire_aliases: [{DateTime, RpcElixir.UnixMillis}]
-
-  Each `{source, target}` pair maps a source module's `.t()` to a `CustomType`
-  target. The alias is applied at compile time to both serialization and type
-  generation.
+  See [Custom types](custom-types.md) for worked examples, branded TypeScript
+  types, `RpcElixir.UnixMillis`, and `wire_aliases`.
   """
 
+  @doc """
+  Required. Returns an already-resolved internal spec map.
+
+  That is the same shape `RpcElixir.Types.resolve/1` returns. The inner spec
+  decides the TypeScript that codegen emits.
+  """
   @callback wire_spec() :: RpcElixir.Types.internal_spec()
+
+  @doc """
+  Required. Receives the Elixir value.
+
+  It must return a value that conforms to `c:wire_spec/0`. The result is
+  serialized again against that spec. For a primitive wire that is a string,
+  number, boolean, or nil. A structured wire raises on a mismatch, such as a
+  missing required field.
+  """
   @callback serialize(value :: term()) :: term()
+
+  @doc """
+  Optional. The input side of `c:serialize/1`.
+
+  It receives the wire value, already validated against `c:wire_spec/0`. It
+  returns `{:ok, domain_value}`, or `{:error, reason}` to reject bad input.
+  When not implemented, the wire-validated value passes through unchanged.
+  """
   @callback deserialize(wire :: term()) :: {:ok, term()} | {:error, term()}
+
+  @doc """
+  Optional. Emits a branded TypeScript alias instead of the plain wire type.
+
+  Implement it when the client must not auto-parse a string or number wire.
+  For example: arbitrary-precision numbers, 64-bit ids, or epoch-millisecond
+  timestamps. A string wire gives `string & { readonly __brand: "Name" }`. An
+  integer or float wire gives `number & { readonly __brand: "Name" }`.
+
+  This requires `c:wire_spec/0` to resolve to
+  `%{kind: "primitive", type: "string" | "integer" | "float"}`. Any other wire
+  shape would make the brand lie about its base type. Codegen raises.
+
+  The returned name must be a valid TypeScript identifier. It must not clash
+  with a built-in brand, a generated interface, or a reserved TypeScript type
+  name. No two custom types may return the same name.
+  """
   @callback ts_type() :: String.t()
 
   @optional_callbacks deserialize: 1, ts_type: 0

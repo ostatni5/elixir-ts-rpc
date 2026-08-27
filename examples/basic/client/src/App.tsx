@@ -31,7 +31,7 @@ export default function App() {
       rpc.auth.me({}),
       rpc.users.list({
         // DateTime is aliased to RpcElixir.UnixMillis, so datetime crosses the wire as
-        // the branded number EpochMillis. Brand the epoch-ms value explicitly on input.
+        // the branded number EpochMillis — brand the epoch-ms value explicitly on input.
         filter: { since: Date.parse("2024-01-01T00:00:00Z") as EpochMillis },
       }),
     ]);
@@ -44,7 +44,7 @@ export default function App() {
   };
 
   // `rpc.users.update.isError` checks `e.code` at runtime and narrows to this
-  // call's typed error union. `isTransportError` catches the client-synthesized
+  // call's typed error union; `isTransportError` catches the client-synthesized
   // codes (network_error, …) with a typed `e.code` of its own.
   const handleUpdateEmail = async (id: string, email: string): Promise<UpdateEmailResult> => {
     try {
@@ -63,7 +63,7 @@ export default function App() {
         // `unauthorized` is contributed by the RequireUser middleware (source:
         // "middleware") and carries no `field` detail. Narrowing by source rather
         // than by magic-string code lets TS prove the remaining arm is the
-        // handler's domain error, so `e.details?.field` below is typed, no code
+        // handler's domain error — so `e.details?.field` below is typed, no code
         // check needed.
         if (isMiddlewareError(e)) {
           return { ok: false, kind: "auth", message: e.message };

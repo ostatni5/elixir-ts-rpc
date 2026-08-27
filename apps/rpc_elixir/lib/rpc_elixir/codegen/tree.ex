@@ -8,6 +8,7 @@ defmodule RpcElixir.Codegen.Tree do
 
   alias RpcElixir.Codegen.Render
   alias RpcElixir.Codegen.SourceLinks
+  alias RpcElixir.JSON
 
   def build_proc_tree(procedures) do
     Enum.reduce(procedures, %{}, fn proc, acc ->
@@ -18,7 +19,7 @@ defmodule RpcElixir.Codegen.Tree do
 
   defp insert_proc_tree(tree, [segment], proc) do
     if is_map(Map.get(tree, segment)) do
-      raise ~s(Codegen: name collision: procedure "#{proc.name}" cannot coexist with an existing namespace "#{segment}", "#{segment}" would be both a leaf method and a namespace. Rename one of them.)
+      raise ~s(Codegen: name collision: procedure "#{proc.name}" cannot coexist with an existing namespace "#{segment}" — "#{segment}" would be both a leaf method and a namespace. Rename one of them.)
     end
 
     Map.put(tree, segment, {:leaf, proc})
@@ -27,7 +28,7 @@ defmodule RpcElixir.Codegen.Tree do
   defp insert_proc_tree(tree, [segment | rest], proc) do
     case Map.get(tree, segment) do
       {:leaf, existing_proc} ->
-        raise ~s(Codegen: name collision: procedure "#{existing_proc.name}" cannot coexist with procedure "#{proc.name}", "#{segment}" would be both a leaf method and a namespace. Rename one of them.)
+        raise ~s(Codegen: name collision: procedure "#{existing_proc.name}" cannot coexist with procedure "#{proc.name}" — "#{segment}" would be both a leaf method and a namespace. Rename one of them.)
 
       sub ->
         sub = sub || %{}
@@ -107,7 +108,7 @@ defmodule RpcElixir.Codegen.Tree do
 
   # The procedure's error type is its handler-declared error union (a
   # `DomainError<…>` alias) widened by any codes its middleware can `halt/2` with
-  # (a `MiddlewareError<…>` arm), `HandlerError | MiddlewareError<"unauthorized">`.
+  # (a `MiddlewareError<…>` arm) — `HandlerError | MiddlewareError<"unauthorized">`.
   # The two arms carry distinct `source` literals, so a client `source` check (or
   # an `isDomainError`/`isMiddlewareError` guard) narrows the union at compile
   # time. (`never | MiddlewareError<...>` collapses to `MiddlewareError<...>`, so
@@ -120,7 +121,7 @@ defmodule RpcElixir.Codegen.Tree do
   end
 
   defp error_codes_literal(proc) do
-    # error_code_values yields string codes, but middleware codes are atoms, normalize
+    # error_code_values yields string codes, but middleware codes are atoms — normalize
     # both to strings so a middleware code already in the handler @spec de-dups.
     values =
       (Render.error_code_values(proc.error) ++ middleware_error_codes(proc))

@@ -24,7 +24,7 @@ defmodule RpcElixir.TypesTestFixtures.PermissiveBrand do
   @type t :: integer()
   @impl true
   def wire_spec, do: %{kind: "primitive", type: "string"}
-  # Deliberately accepts anything - the danger the input path must guard against.
+  # Deliberately accepts anything — the danger the input path must guard against.
   @impl true
   def serialize(v), do: inspect(v)
 end

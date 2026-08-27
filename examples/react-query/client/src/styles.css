@@ -1,0 +1,80 @@
+:root {
+  font-family: system-ui, sans-serif;
+  color-scheme: light dark;
+}
+
+body {
+  margin: 0;
+  padding: 2rem;
+  background: #f6f6f8;
+}
+
+.card {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 1.5rem 2rem;
+  background: Canvas;
+  border: 1px solid color-mix(in srgb, CanvasText 15%, transparent);
+  border-radius: 12px;
+}
+
+.topbar {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.login {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+input {
+  padding: 0.4rem 0.6rem;
+  border: 1px solid color-mix(in srgb, CanvasText 25%, transparent);
+  border-radius: 6px;
+}
+
+button {
+  padding: 0.4rem 0.8rem;
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, CanvasText 25%, transparent);
+  cursor: pointer;
+}
+
+.btn-primary {
+  background: #7c3aed;
+  color: white;
+  border-color: #7c3aed;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 1rem;
+}
+
+th,
+td {
+  text-align: left;
+  padding: 0.5rem;
+  border-bottom: 1px solid color-mix(in srgb, CanvasText 12%, transparent);
+}
+
+.email-editor {
+  display: inline-flex;
+  gap: 0.4rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.error {
+  color: #dc2626;
+}

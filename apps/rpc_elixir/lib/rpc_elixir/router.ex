@@ -1,8 +1,30 @@
 defmodule RpcElixir.Router do
   @moduledoc """
-  Macro-based DSL for defining RPC procedures in a router module.
+  Macro-based DSL for defining RPC procedures in a router module. See
+  [Getting started](getting-started.md) for the surrounding setup.
 
   ## Usage
+
+  `expose/2` publishes a whole handler module: every public, spec'd, arity-2
+  function becomes a procedure named after the function. That is the default way
+  to register an API surface.
+
+      defmodule MyApp.Router do
+        use RpcElixir.Router
+
+        scope "users" do
+          expose Hello.Users   # → "users.get", "users.update", ...
+        end
+
+        scope "accounts", middleware: [MyApp.Middleware.RequireUser] do
+          expose Hello.Accounts
+        end
+      end
+
+  `procedure/2` and `procedure/3` are the manual alternative. They name one
+  procedure at a time from a remote arity-2 capture, for when the wire name must
+  differ from the function name, when only part of a module should be reachable,
+  or when one function needs its own middleware.
 
       defmodule MyApp.Router do
         use RpcElixir.Router
@@ -11,66 +33,53 @@ defmodule RpcElixir.Router do
         procedure "users.update", &Hello.Users.update/2, middleware: [MyApp.Middleware.RequireUser]
       end
 
-  Each `procedure` takes a wire name and a remote function capture of arity 2.
-  Captures give editors "go to definition" support and enforce arity at the
-  call site. Local captures (`&local_fn/2`), captures of other arities, and
-  non-capture values raise `CompileError`.
-
   ## Scoping
 
-  `scope` groups procedures under a shared prefix and/or shared middleware so a
-  cross-cutting concern (e.g. authentication) is declared once for the whole
-  group instead of repeated on every `procedure`. See `scope/2` and `scope/3`.
+  `scope/2` and `scope/3` share a prefix, middleware, or both across a group.
+  Both registration forms nest inside them and mix freely, as long as no two
+  procedures claim the same name.
 
       scope "users", middleware: [MyApp.Middleware.RequireUser] do
-        procedure "list", &Hello.Users.list/2   # → "users.list"
-        procedure "get",  &Hello.Users.get/2    # → "users.get"
-      end
-
-  `expose` registers every public, `@spec`'d, arity-2 function of a handler module
-  as a procedure named after the function, composing with the enclosing scope. See
-  `expose/2`.
-
-      scope "users", middleware: [MyApp.Middleware.RequireUser] do
-        expose Hello.Users   # → "users.list", "users.get", ...
+        expose Hello.Users                    # → "users.get", "users.list", ...
+        procedure "search", &Hello.Search.users/2   # → "users.search"
       end
 
   ## Wire aliases
 
-  The `wire_aliases` option maps a source type's `.t()` to a `RpcElixir.CustomType`
-  module so it crosses the wire as that custom type project-wide, without per-field
-  annotation. For example, `{DateTime, RpcElixir.UnixMillis}` makes every `DateTime`
-  serialize as the branded `EpochMillis` number. Aliases are applied at router compile
-  time so codegen and runtime agree. The target must implement the
-  `RpcElixir.CustomType` behaviour, and a source cannot alias to itself.
-
       use RpcElixir.Router, wire_aliases: [{DateTime, RpcElixir.UnixMillis}]
+
+  The `wire_aliases` option maps a source type's `.t()` to a
+  `RpcElixir.CustomType` module project-wide. See [Custom types](custom-types.md).
 
   ## Generated functions
 
-  - `__procedures__/0`, returns a list of maps with keys:
-    `name`, `handler_mod`, `handler_fun`, `input`, `output`, `error`,
-    `middleware`, `doc`, `schema_base`.
-    `input`, `output`, and `error` are internal IR maps produced by
-    `RpcElixir.Types.FromSpec`.
+  - `__procedures__/0` — a list of maps with keys `name`, `handler_mod`,
+    `handler_fun`, `input`, `output`, `error`, `middleware`, `doc`, `schema_base`.
+    `input` and `output` are internal IR maps from `RpcElixir.Types.FromSpec`.
+    `error` is one too, or `nil` when the spec declares no `{:error, _}` arm.
 
-  - `__manifest__/0`, same list with the `:middleware` key removed.
-    Intended for serialisation and codegen. Middleware is server-internal.
+  - `__manifest__/0` — the same list with the `:middleware` key removed, for
+    exporting a router shape without server-internal detail. Codegen does not
+    use it: it needs `:middleware` to fold in middleware error codes, so it
+    reads `__procedures__/0`.
 
-  - `__procedures_index__/0`, a `%{name => procedure}` map for O(1) dispatch
+  - `__procedures_index__/0` — a `%{name => procedure}` map for O(1) dispatch
     lookup. Same procedure maps as `__procedures__/0`, keyed by `:name`.
 
   ## Compile-time guarantees
 
-  Every `procedure` call is validated at compile time:
+  Every registration, whether from `expose` or `procedure`, is validated at
+  compile time:
 
-  - The capture must be a remote function capture of arity 2.
+  - A `procedure` capture must be a remote function capture of arity 2.
+  - An `expose`d module must `use RpcElixir.Handler` and must have at least one
+    public, spec'd, arity-2 function.
   - The handler module must be compilable via `Code.ensure_compiled!/1`.
-  - The function must carry a `@spec` in the RPC convention
+  - Every registered function must carry a `@spec` in the RPC convention
     `(input, ctx) :: {:ok, output} | {:error, error}`.
   - Procedure names must be unique within a router.
 
-  Violations raise `CompileError` pointing at the offending `procedure` call site.
+  Violations raise `CompileError` at the offending call site.
   """
 
   alias RpcElixir.Types.FromSpec
@@ -199,6 +208,29 @@ defmodule RpcElixir.Router do
     end
   end
 
+  @doc """
+  Registers one procedure from a wire name and a remote arity-2 capture.
+
+      procedure "users.get", &Hello.Users.get/2
+
+  This is the manual alternative to `expose/2`. Reach for it when the wire name
+  must differ from the function name, when only part of a module should be
+  reachable, when one function needs its own middleware, or when the published
+  surface has to be auditable line by line. Otherwise prefer `expose/2` and let
+  the handler module define the surface.
+
+  The capture gives editors go-to-definition and pins the arity at the call
+  site. A local capture, another arity, or a non-capture raises `CompileError`.
+
+  The `:middleware` option adds middleware for this procedure alone. Each entry
+  is a module or a `{module, opts}` tuple. See `RpcElixir.Middleware`.
+
+      procedure "users.update", &Hello.Users.update/2, middleware: [RequireUser]
+
+  Inside `scope/2` the scope prefix and middleware also apply. Every call is
+  checked at compile time. See
+  ["Compile-time guarantees"](#module-compile-time-guarantees).
+  """
   defmacro procedure(name, capture_ast, opts \\ []) do
     {handler_mod, fun} = extract_capture!(capture_ast, __CALLER__)
     accumulate(name, handler_mod, fun, opts, __CALLER__)
@@ -219,20 +251,20 @@ defmodule RpcElixir.Router do
   end
 
   @doc """
-  Groups the `procedure` calls in the block under a shared prefix and/or shared
-  middleware.
+  Groups the `procedure` calls in the block. They share a prefix, middleware,
+  or both. Declare a cross-cutting concern once, not per procedure.
 
-  A scope prepends its `:middleware` to every procedure defined inside it (before
-  any procedure-specific middleware, so outer-most auth runs first) and, given a
-  string prefix, prepends a dotted segment to each inner procedure's wire name.
-  Scopes nest. Prefixes concatenate and middleware accumulates outer-to-inner.
+  A string prefix prepends a dotted segment to each inner wire name. Scope
+  middleware runs before procedure-specific middleware. Outer-most auth
+  therefore runs first. Scopes nest: prefixes concatenate and middleware
+  accumulates outer-to-inner.
 
       scope "users", middleware: [RequireUser] do
         procedure "list", &Users.list/2   # → "users.list", middleware: [RequireUser]
         procedure "get", &Users.get/2     # → "users.get",  middleware: [RequireUser]
       end
 
-  The prefix is optional, `scope middleware: [RequireUser] do ... end` shares
+  The prefix is optional. `scope middleware: [RequireUser] do ... end` shares
   middleware without renaming. Procedures outside any scope are unaffected.
   """
   defmacro scope(prefix_or_opts, do: block) do
@@ -246,22 +278,26 @@ defmodule RpcElixir.Router do
 
   @doc """
   Registers every public, `@spec`'d, arity-2 function of a handler module as a
-  procedure, named after the function.
-
-  The module must `use RpcElixir.Handler`. The wire name is the function name,
-  combined with any enclosing `scope` prefix. Enclosing scope middleware (and any
-  `:middleware` passed here) apply as with `procedure`. Every exposed function
-  must follow the RPC contract `(input, ctx) :: {:ok, _} | {:error, _}`. A
-  function that doesn't raises a `CompileError`, the same as a hand-written
-  `procedure`.
+  procedure. Each procedure takes the name of its function. This is the default
+  way to register an API surface.
 
       scope "counter", middleware: [RequireUser] do
         expose Hello.Counter   # → "counter.get", "counter.adjust", ...
       end
 
-  Use this when the module *is* the API surface. Adding a spec'd arity-2 function
-  to it then publishes a procedure. Prefer explicit `procedure` calls when the
-  exposed surface should be an auditable subset of the module.
+  The module *is* the API surface. Adding a spec'd arity-2 function to it
+  publishes a procedure, with no router edit. Helpers left as `defp`, or without
+  a `@spec`, stay unpublished.
+
+  The module must `use RpcElixir.Handler`, or `expose` raises. A module with no
+  public, spec'd, arity-2 function raises too. The wire name joins any enclosing
+  `scope/2` prefix. Scope middleware and the `:middleware` option apply as for
+  `procedure/3`, to every function in the module. Every exposed function must
+  follow the RPC contract `(input, ctx) :: {:ok, _} | {:error, _}`. A function
+  that does not raises `CompileError`, the same as a hand-written `procedure`.
+
+  See `procedure/3` for the manual alternative, and for the cases that call for
+  it. The two mix freely in one router.
   """
   defmacro expose(handler_ast, opts \\ []) do
     caller = __CALLER__
@@ -319,7 +355,7 @@ defmodule RpcElixir.Router do
     {scoped_name(stack, name), handler_mod, fun, scoped_opts(stack, opts), file, line}
   end
 
-  # Stack is innermost-first. Outermost prefix/middleware must lead.
+  # Stack is innermost-first; outermost prefix/middleware must lead.
   defp scoped_name(stack, name) do
     stack
     |> Enum.reverse()
@@ -577,7 +613,7 @@ defmodule RpcElixir.Router do
       )
     end
 
-    # Reject modules that merely happen to export call/2 (e.g. Plugs), they must
+    # Reject modules that merely happen to export call/2 (e.g. Plugs) — they must
     # opt in by declaring `@behaviour RpcElixir.Middleware`.
     unless declares_middleware_behaviour?(mod) do
       compile_error!(

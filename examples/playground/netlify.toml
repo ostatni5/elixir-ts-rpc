@@ -1,0 +1,37 @@
+# Netlify only hosts the prebuilt bundle; it does not build it.
+#
+# Popcorn 0.3.3 string-compares OTP and Elixir versions and demands exactly
+# 26.0.2 / 1.17.3. Netlify's build image would have to compile Erlang from
+# source to reach that, which does not fit a build window, so the cook happens
+# in GitHub Actions (see .github/workflows/deploy-playground.yml) and the
+# finished `dist/` is uploaded here.
+[build]
+  publish = "dist"
+  command = ""
+
+# The Popcorn runtime needs SharedArrayBuffer, which browsers only hand out to
+# cross-origin-isolated documents. This is the whole reason the playground cannot
+# live on GitHub Pages, which cannot set response headers.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Cross-Origin-Opener-Policy = "same-origin"
+    Cross-Origin-Embedder-Policy = "require-corp"
+    Cross-Origin-Resource-Policy = "same-origin"
+
+# Filenames are not content-hashed, so the entry document must never be cached
+# or a deploy would leave clients on a stale mix of old HTML and new bundles.
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+[[headers]]
+  for = "/*.wasm"
+  [headers.values]
+    Content-Type = "application/wasm"
+
+[[headers]]
+  for = "/*.avm"
+  [headers.values]
+    Content-Type = "application/octet-stream"

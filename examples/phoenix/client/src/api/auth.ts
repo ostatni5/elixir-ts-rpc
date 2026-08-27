@@ -1,7 +1,7 @@
 import { csrfToken } from "../csrf";
 
-// Login and logout are owned entirely by Phoenix's generated auth. The SPA
-// writes none of it. Login is a server-rendered page. Logout is Phoenix's
+// Login and logout are owned entirely by Phoenix's generated auth — the SPA
+// writes none of it. Login is a server-rendered page; logout is Phoenix's
 // `DELETE /users/log-out`, which we trigger by submitting a form with the
 // method override + CSRF token (exactly what a Phoenix-rendered button does).
 export const loginUrl = "/users/log-in";

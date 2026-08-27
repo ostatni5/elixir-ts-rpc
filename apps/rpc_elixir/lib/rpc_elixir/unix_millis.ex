@@ -1,12 +1,12 @@
 defmodule RpcElixir.UnixMillis do
   @moduledoc """
-  Built-in branded-number custom type: a `DateTime` crossing the wire as epoch
-  milliseconds. Emits the TypeScript brand `EpochMillis`
-  (a `number & { readonly __brand: "EpochMillis" }`), so callers can't
-  accidentally pass a bare number where an instant is expected.
+  Built-in branded-number custom type. A `DateTime` crosses the wire as epoch
+  milliseconds. The emitted TypeScript brand is `EpochMillis`
+  (`number & { readonly __brand: "EpochMillis" }`). It stops callers passing a
+  bare number where an instant is expected.
 
-  Use per-field as `RpcElixir.UnixMillis.t()`, or map every `DateTime` in a router
-  to it via `use RpcElixir.Router, wire_aliases: [{DateTime, RpcElixir.UnixMillis}]`.
+  Use it per field as `RpcElixir.UnixMillis.t()`. Or map every `DateTime` in a
+  router with `wire_aliases`, see [Custom types](custom-types.md).
   """
   @behaviour RpcElixir.CustomType
 

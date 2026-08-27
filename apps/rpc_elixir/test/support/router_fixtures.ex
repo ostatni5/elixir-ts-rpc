@@ -25,7 +25,7 @@ defmodule RpcElixir.RouterFixtures.ExposableHandler do
   @spec list(%{}, %{}) :: {:ok, [%{id: String.t()}]}
   def list(_input, _ctx), do: {:ok, []}
 
-  # Public arity-1 function with a spec - must be excluded from `expose`.
+  # Public arity-1 function with a spec — must be excluded from `expose`.
   @spec ping(%{}) :: :ok
   def ping(_input), do: :ok
 end

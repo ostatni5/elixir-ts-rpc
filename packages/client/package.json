@@ -1,7 +1,7 @@
 {
   "name": "@elixir-ts-rpc/client",
-  "version": "0.0.1",
-  "description": "Typed RPC client for elixir-ts-rpc, a type-safe RPC bridge between Elixir/Phoenix servers and TypeScript.",
+  "version": "0.0.2",
+  "description": "Typed RPC client for elixir-ts-rpc — a type-safe RPC bridge between Elixir/Phoenix servers and TypeScript.",
   "keywords": [
     "rpc",
     "elixir",
@@ -20,7 +20,7 @@
   "sideEffects": false,
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ostatni5/elixir-ts-rpc.git",
+    "url": "https://github.com/ostatni5/elixir-ts-rpc",
     "directory": "packages/client"
   },
   "main": "./dist/index.js",

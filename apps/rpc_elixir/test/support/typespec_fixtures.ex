@@ -120,7 +120,7 @@ defmodule RpcElixir.TypespecFixtures.TimestampedSchema do
 end
 
 defmodule RpcElixir.TypespecFixtures.RejectedMapSchema do
-  @moduledoc "Ecto schema with a `:map` field - rejected by the walker."
+  @moduledoc "Ecto schema with a `:map` field — rejected by the walker."
   use Ecto.Schema
 
   @primary_key false

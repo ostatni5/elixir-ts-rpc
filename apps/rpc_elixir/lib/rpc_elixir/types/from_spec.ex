@@ -1,38 +1,38 @@
 defmodule RpcElixir.Types.FromSpec do
   @moduledoc """
-  Reads classic `@spec` declarations from a compiled module's BEAM debug info
-  (via `Code.Typespec`) and translates them into the internal `%{kind: ...}`
-  representation used by handlers, routers, and codegen.
+  Reads classic `@spec` declarations from a compiled module's BEAM debug info,
+  via `Code.Typespec`. Translates them into the internal `%{kind: ...}` IR used
+  by handlers, routers, and codegen.
 
-  Users write `@spec` next to their RPC handlers. `FromSpec` reads them at
-  runtime, no compile-time macro is required to capture AST.
+  You write `@spec` next to your RPC handlers. `FromSpec` reads them at runtime.
+  No compile-time macro is needed to capture AST.
 
-  Note: `Code.Typespec` is `@moduledoc false` in Elixir core. It has been
-  stable in practice for many years and is consumed by ExDoc and dialyzer
-  tooling, but the API is not officially committed.
+  Note: `Code.Typespec` is `@moduledoc false` in Elixir core, so the API is not
+  officially committed. In practice it has been stable for many years. ExDoc
+  and dialyzer tooling consume it.
 
-  See `RpcElixir.Types.FromInferred` for an experimental backend that reads
-  Elixir's set-theoretic inferred signatures instead.
+  `RpcElixir.Types.FromInferred` is an experimental backend. It reads Elixir's
+  set-theoretic inferred signatures instead.
   """
 
   alias RpcElixir.Types.RpcConvention
   alias RpcElixir.Types.Walker
 
   @doc """
-  Reads the spec for `module.function/arity` and returns
+  Reads the spec for `module.function/arity`. Returns
   `{:ok, %{args: [input_type, ctx_ast, ...], return_ast: ast, local_types: map}}`.
 
-  Only the first arg (the RPC `input`) is translated to the internal type
-  representation, it is the sole arg in the wire contract. The remaining args
-  (the server-side `ctx`) are returned as raw AST and never walked, so a handler
-  may type `ctx` as a non-wire type. The return is likewise left as raw AST
-  because handler-style returns (`{:ok, T} | {:error, E}`) must be decomposed by
-  tag before walking, caller decides what to do with it.
+  Only the first arg is translated: the RPC `input`, the sole arg in the wire
+  contract. The remaining `ctx` args come back as raw AST. They are never
+  walked, so a handler may type `ctx` as a non-wire type. The return is raw AST
+  too. Handler-style returns (`{:ok, T} | {:error, E}`) must be decomposed by
+  tag before walking, so the caller decides.
 
-  Returns `{:error, :no_spec}` if no `@spec` is attached to the function,
-  `{:error, :module_not_found}` if the module cannot be loaded, or
+  Returns `{:error, :no_spec}` without a `@spec`. Returns
+  `{:error, :module_not_found}` if the module cannot be loaded. Returns
   `{:error, {:invalid_spec_shape, ast}}` if the `@spec` is not the expected
-  single-clause `fun(args) :: return` shape (e.g. a multi-clause spec).
+  single-clause `fun(args) :: return` shape or its `when`-bounded form.
+  A multi-clause `@spec` is not rejected; only one clause is kept.
   """
   @spec fetch_spec(module(), atom(), non_neg_integer()) ::
           {:ok,
@@ -48,8 +48,8 @@ defmodule RpcElixir.Types.FromSpec do
 
   @doc """
   Like `fetch_spec/3`, but resolves source-module `.t()` calls through
-  `wire_aliases` (`%{source => target_custom_type}`). The aliases are threaded
-  into the `Walker.Ctx` so that codegen and runtime read the same frozen IR.
+  `wire_aliases` — a `%{source => target_custom_type}` map. Aliases are threaded
+  into the `Walker.Ctx`, so codegen and runtime read the same frozen IR.
   """
   @spec fetch_spec(module(), atom(), non_neg_integer(), map()) ::
           {:ok,
@@ -81,12 +81,12 @@ defmodule RpcElixir.Types.FromSpec do
   @doc """
   Convenience for the RPC convention `call(input, context) :: {:ok, output} | {:error, error}`.
 
-  Returns `{:ok, %{input: t, output: t, error: t | nil}}` on success,
-  `{:error, :no_spec}` if the function has no `@spec`,
-  `{:error, :module_not_found}` if the module cannot be loaded,
-  `{:error, {:invalid_spec_shape, ast}}` if the `@spec` is not a single-clause
-  `fun(args) :: return`, or
-  `{:error, {:invalid_return, return_ast}}` if the return type lacks an `{:ok, _}` variant.
+  Returns `{:ok, %{input: t, output: t, error: t | nil}}` on success. Otherwise:
+  `{:error, :no_spec}` without a `@spec`. `{:error, :module_not_found}` if the
+  module cannot be loaded. `{:error, {:invalid_spec_shape, ast}}` if the `@spec`
+  is not a single-clause `fun(args) :: return`.
+  `{:error, {:invalid_return, return_ast}}` if the return type lacks an
+  `{:ok, _}` variant.
   """
   @spec fetch_rpc(module(), atom()) ::
           {:ok,
@@ -102,11 +102,10 @@ defmodule RpcElixir.Types.FromSpec do
   def fetch_rpc(module, function), do: fetch_rpc(module, function, %{})
 
   @doc """
-  Same as `fetch_rpc/2`, applying `wire_aliases` while resolving types.
-
-  `wire_aliases` maps a source module to a `RpcElixir.CustomType` target (e.g.
-  `%{DateTime => RpcElixir.UnixMillis}`) so the source's `.t()` crosses the wire
-  as the target custom type. This is the form the router calls.
+  Same as `fetch_rpc/2`, applying `wire_aliases` while resolving types. The map
+  is `%{source => target_custom_type}`, e.g. `%{DateTime => RpcElixir.UnixMillis}`.
+  The source's `.t()` then crosses the wire as that custom type. This is the
+  form the router calls.
   """
   @spec fetch_rpc(module(), atom(), map()) ::
           {:ok,
@@ -139,13 +138,13 @@ defmodule RpcElixir.Types.FromSpec do
     end
   end
 
-  # Only the first arg, the RPC `input`, is part of the wire contract, so it is
+  # Only the first arg — the RPC `input` — is part of the wire contract, so it is
   # the only one translated to the internal type representation. The remaining args
   # (the server-side `ctx`) are never validated or serialized and never reach
   # codegen, so they are returned as raw AST. This lets a handler type its `ctx`
   # as a non-wire type (e.g. `RpcElixir.Context.t()`) without it having to be
   # wire-serializable.
-  # The empty clause guards the arity-0 `fetch_spec` call path (`fun() :: x`),
+  # The empty clause guards the arity-0 `fetch_spec` call path (`fun() :: x`) —
   # the RPC contract itself is always arity-2, so it never hits this in practice.
   defp walk_contract_args([], _ctx), do: []
 

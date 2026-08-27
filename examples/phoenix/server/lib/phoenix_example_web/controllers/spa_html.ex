@@ -4,15 +4,15 @@ defmodule PhoenixExampleWeb.SpaHTML do
 
   This example is built to run in development via `run.sh`. When
   `:vite_dev_server` is configured (dev), `vite_assets/1` points at the running
-  Vite dev server for HMR. The shell is still served by Phoenix (for the CSRF
+  Vite dev server for HMR; the shell is still served by Phoenix (for the CSRF
   token) while the JS modules stream from Vite, and the `@vitejs/plugin-react`
-  refresh preamble is injected here because Phoenix, not Vite, serves the HTML
+  refresh preamble is injected here because Phoenix — not Vite — serves the HTML
   (the standard Vite "backend integration" setup).
 
   For a production build you would run `vite build` (which writes a hashed
-  manifest into `priv/static`) and serve those assets. The `prod_assets/0` path
+  manifest into `priv/static`) and serve those assets; the `prod_assets/0` path
   reads that manifest. Wiring `vite build` into `mix assets.deploy` and
-  reconciling it with `phx.digest` is left out of this example. It targets local
+  reconciling it with `phx.digest` is left out of this example — it targets local
   development.
   """
 

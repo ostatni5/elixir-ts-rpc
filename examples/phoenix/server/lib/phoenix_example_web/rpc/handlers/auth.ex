@@ -3,7 +3,7 @@ defmodule PhoenixExampleWeb.Rpc.Handlers.Auth do
   Read-only auth procedure.
 
   Returns the user that Phoenix authenticated for this request. It only *reads*
-  the scope, so it fits the typed RPC contract cleanly. Login/logout, which
+  the scope, so it fits the typed RPC contract cleanly — login/logout, which
   must mutate the session cookie, stay in Phoenix's generated controllers.
   """
 

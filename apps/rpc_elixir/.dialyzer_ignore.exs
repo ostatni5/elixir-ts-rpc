@@ -1,22 +1,14 @@
-# Dialyzer warnings we deliberately accept. Each entry is {file, warning_type}
-# so a *different* (genuinely new) warning in the same file still surfaces.
+# Everything under test/support is deliberately invalid. The fixtures exist to
+# prove the library copes with specs that lie: a handler returning a struct where
+# the spec says an atom, a `ts_type/0` returning a non-binary, an output that does
+# not match its own @spec. Dialyzer is right about every one of them, which is the
+# point, so the whole directory is excluded rather than annotated function by
+# function.
 [
-  # Optional Phoenix integration: `trigger/1` calls Phoenix.CodeReloader only
-  # behind `Code.ensure_loaded?/1`. Phoenix is not a dependency, so dialyzer
-  # can't resolve the call.
-  {"lib/rpc_elixir/watcher.ex", :unknown_function},
+  ~r{^test/support/},
 
-  # Test fixtures intentionally carry mismatched @specs to exercise the
-  # codegen and runtime error-handling paths.
-  {"test/support/router_fixtures.ex", :invalid_contract},
-  {"test/support/codegen_fixtures.ex", :invalid_contract},
-
-  # Ecto schemas don't define a `t/0` type; the codegen reads the struct, not
-  # the type. The EctoTimestamp fixture references TimestampedSchema.t/0 on
-  # purpose to cover that case.
-  {"test/support/codegen_fixtures.ex", :unknown_type},
-
-  # NonStringBrand.ts_type/0 returns a non-binary on purpose, to test that the
-  # codegen rejects invalid custom-type metadata.
-  {"test/support/typespec_fixtures.ex", :callback_type_mismatch}
+  # Phoenix is an optional integration, deliberately not a dependency, so
+  # `Phoenix.CodeReloader` is genuinely absent from the PLT. The call site guards
+  # with `Code.ensure_loaded?/1`, which dialyzer cannot see through.
+  {"lib/rpc_elixir/watcher.ex", :unknown_function}
 ]

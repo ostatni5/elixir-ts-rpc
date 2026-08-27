@@ -25,7 +25,7 @@ for i in $(seq 1 20); do
 done
 
 echo "==> Server ready at http://localhost:4001"
-echo "==> Starting Vite dev server - open http://localhost:5173"
+echo "==> Starting Vite dev server — open http://localhost:5173"
 npm run dev --workspace=@examples/basic-client &
 
 wait

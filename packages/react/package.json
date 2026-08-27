@@ -1,0 +1,64 @@
+{
+  "name": "@elixir-ts-rpc/react",
+  "version": "0.0.2",
+  "description": "React + TanStack Query adapter for elixir-ts-rpc: typed useQuery/useMutation hooks over a generated RPC client.",
+  "keywords": [
+    "rpc",
+    "elixir",
+    "phoenix",
+    "typescript",
+    "type-safe",
+    "react",
+    "tanstack-query",
+    "react-query"
+  ],
+  "private": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "license": "MIT",
+  "sideEffects": false,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ostatni5/elixir-ts-rpc.git",
+    "directory": "packages/react"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.test.json",
+    "prepack": "npm run build",
+    "prepublishOnly": "npm run build"
+  },
+  "peerDependencies": {
+    "@elixir-ts-rpc/client": ">=0.0.2",
+    "@tanstack/react-query": ">=5",
+    "react": ">=18"
+  },
+  "devDependencies": {
+    "@elixir-ts-rpc/client": "*",
+    "@tanstack/react-query": "^5",
+    "@types/node": "^20",
+    "@types/react": "^18",
+    "react": "^18",
+    "typescript": "^5.5",
+    "vitest": "^2.0"
+  }
+}

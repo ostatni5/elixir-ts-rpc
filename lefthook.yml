@@ -8,7 +8,7 @@
 pre-commit:
   parallel: true
   jobs:
-    # rpc_elixir is the published library. Its formatting and lint are gated.
+    # rpc_elixir is the published library — its formatting and lint are gated.
     - name: rpc-format
       root: "apps/rpc_elixir/"
       glob: "*.{ex,exs}"
@@ -38,13 +38,18 @@ pre-commit:
       glob: "*.{ts,tsx}"
       run: npm run typecheck
 
+    - name: react-typecheck
+      root: "packages/react/"
+      glob: "*.{ts,tsx}"
+      run: npm run typecheck
+
     - name: example-client-typecheck
       root: "examples/basic/client/"
       glob: "*.{ts,tsx}"
       run: npm run typecheck
 
 # Library test suite runs before a push (the full pre-commit gate would be too
-# slow per-commit). CI is the authoritative gate. This is a fast local catch.
+# slow per-commit). CI is the authoritative gate; this is a fast local catch.
 pre-push:
   jobs:
     - name: rpc-test

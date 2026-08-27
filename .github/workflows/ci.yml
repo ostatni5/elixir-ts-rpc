@@ -9,8 +9,22 @@ permissions:
 
 jobs:
   elixir:
-    name: Elixir (library)
+    name: Elixir ${{ matrix.elixir }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Primary: matches .tool-versions. Runs the full gate.
+          - elixir: "1.19.5-otp-28"
+            otp: "28.1"
+            primary: true
+          # Compat floor: the oldest supported Elixir (`~> 1.17` in mix.exs).
+          # Compile and tests only. `FromInferred` needs 1.19 inference and its
+          # tests exclude themselves here via the `:requires_inference` tag.
+          - elixir: "1.17.3-otp-26"
+            otp: "26.0.2"
+            primary: false
     env:
       MIX_ENV: test
     defaults:
@@ -19,12 +33,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Versions pinned to match .tool-versions: erlang 28.1, elixir 1.19.5-otp-28.
       - name: Set up Erlang/Elixir
         uses: erlef/setup-beam@v1
         with:
-          otp-version: "28.1"
-          elixir-version: "1.19.5-otp-28"
+          otp-version: ${{ matrix.otp }}
+          elixir-version: ${{ matrix.elixir }}
 
       - name: Cache deps and _build
         uses: actions/cache@v4
@@ -32,32 +45,39 @@ jobs:
           path: |
             apps/rpc_elixir/deps
             apps/rpc_elixir/_build
-          key: ${{ runner.os }}-mix-${{ hashFiles('apps/rpc_elixir/mix.lock') }}
+          key: ${{ runner.os }}-mix-${{ matrix.elixir }}-${{ hashFiles('apps/rpc_elixir/mix.lock') }}
           restore-keys: |
-            ${{ runner.os }}-mix-
+            ${{ runner.os }}-mix-${{ matrix.elixir }}-
 
       # Separate cache for the dialyzer PLT (lives under _build/test/plt, per mix.exs).
       - name: Cache dialyzer PLT
+        if: matrix.primary
         uses: actions/cache@v4
         with:
           path: apps/rpc_elixir/_build/test/plt
-          key: ${{ runner.os }}-plt-otp28.1-elixir1.19.5-${{ hashFiles('apps/rpc_elixir/mix.lock') }}
+          key: ${{ runner.os }}-plt-${{ matrix.otp }}-${{ matrix.elixir }}-${{ hashFiles('apps/rpc_elixir/mix.lock') }}
           restore-keys: |
-            ${{ runner.os }}-plt-otp28.1-elixir1.19.5-
+            ${{ runner.os }}-plt-${{ matrix.otp }}-${{ matrix.elixir }}-
 
       - name: Install dependencies
         run: mix deps.get
 
+      - name: Compile
+        run: mix compile --warnings-as-errors
+
       - name: Check formatting
+        if: matrix.primary
         run: mix format --check-formatted
 
       - name: Credo
+        if: matrix.primary
         run: mix credo --strict
 
       - name: Tests
         run: mix test
 
       - name: Dialyzer
+        if: matrix.primary
         run: mix dialyzer
 
   javascript:
@@ -76,16 +96,35 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # Example clients are typechecked in the `integration` job: they depend on
-      # the generated rpc.gen.ts (not present here) and the built client package.
-      - name: Typecheck
-        run: npm run typecheck --workspace @elixir-ts-rpc/client
+      # @elixir-ts-rpc/react resolves @elixir-ts-rpc/client through its dist/, and
+      # the docs build below needs both packages' types.
+      - name: Build workspace packages
+        run: |
+          npm run build --workspace @elixir-ts-rpc/client
+          npm run build --workspace @elixir-ts-rpc/react
+
+      # Scoped to the published packages on purpose. The example clients also
+      # declare a typecheck script, but they need a generated rpc.gen.ts that
+      # only exists after codegen, so the integration job owns them.
+      - name: Typecheck packages
+        run: |
+          npm run typecheck --workspace @elixir-ts-rpc/client
+          npm run typecheck --workspace @elixir-ts-rpc/react
 
       - name: Client tests
         run: npm run test --workspace @elixir-ts-rpc/client
 
+      - name: React adapter tests
+        run: npm run test --workspace @elixir-ts-rpc/react
+
       - name: Biome
         run: npx biome ci .
+
+      # Twoslash type-checks every docs snippet against the generated client
+      # fixture, so a breaking change to the client's public types fails here
+      # rather than silently rotting the docs.
+      - name: Build docs (twoslash type-checks snippets)
+        run: npm run docs:build --workspace @elixir-ts-rpc/docs
 
   integration:
     name: Example end-to-end (codegen + typecheck)
@@ -109,29 +148,44 @@ jobs:
           node-version: "22.0.0"
           cache: npm
 
-      # Each example regenerates client/src/rpc.gen.ts via the :elixir_ts_rpc
-      # compiler hook (see each server's mix.exs / config.exs) during mix compile.
-      - name: Compile basic example (generates rpc.gen.ts)
+      - name: Install Elixir example dependencies
         working-directory: examples/basic/server
-        run: |
-          mix deps.get
-          mix compile
+        run: mix deps.get
 
-      - name: Compile phoenix example (generates rpc.gen.ts)
-        working-directory: examples/phoenix/server
-        run: |
-          mix deps.get
-          mix compile
+      - name: Compile Elixir example
+        working-directory: examples/basic/server
+        run: mix compile
 
       - name: Install JS dependencies
         run: npm ci
 
-      # rpc.gen.ts imports from @elixir-ts-rpc/client, whose dist/ is gitignored;
-      # build it so the example clients can resolve the package's type declarations.
-      - name: Build client package
-        run: npm run build --workspace @elixir-ts-rpc/client
+      # rpc.gen.ts imports from @elixir-ts-rpc/client, and the react-query
+      # example also imports @elixir-ts-rpc/react. Both resolve through a
+      # gitignored dist/, so build them before any example typecheck.
+      - name: Build workspace packages
+        run: |
+          npm run build --workspace @elixir-ts-rpc/client
+          npm run build --workspace @elixir-ts-rpc/react
 
-      - name: Typecheck generated example clients
+      - name: Generate TypeScript client from router
+        working-directory: examples/basic/server
+        run: mix rpc.gen.ts --router BasicServer.Router --out ../client/src/rpc.gen.ts
+
+      # Reuses the basic example's router and server, so it needs no server of
+      # its own. This is the only CI coverage for @elixir-ts-rpc/react against
+      # a real generated client.
+      - name: Generate client for the react-query example
+        run: npm run rpc:gen --workspace @examples/react-query-client
+
+      - name: Typecheck generated clients
         run: |
           npm run typecheck --workspace @examples/basic-client
-          npm run typecheck --workspace @examples/phoenix-client
+          npm run typecheck --workspace @examples/react-query-client
+
+      # The docs twoslash fixture is committed so the Node-only docs deploy needs
+      # no Elixir. Regenerate it here and fail on a diff, so a router or @spec
+      # change cannot leave the documented client types behind.
+      - name: Check docs twoslash fixture is up to date
+        run: |
+          bash docs/scripts/gen-twoslash-fixture.sh
+          git diff --exit-code -- docs/.vitepress/twoslash/rpc.generated.ts

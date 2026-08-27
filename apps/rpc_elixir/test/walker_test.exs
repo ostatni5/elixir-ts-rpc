@@ -1,7 +1,7 @@
 defmodule RpcElixir.WalkerTest do
   @moduledoc """
   Unit tests for the typespec AST walker (`Types.Walker`).
-  Production callers use `RpcElixir.Types.FromSpec` instead. These tests
+  Production callers use `RpcElixir.Types.FromSpec` instead — these tests
   exercise the walker in isolation against quoted AST.
   """
 
@@ -324,7 +324,7 @@ defmodule RpcElixir.WalkerTest do
   end
 
   describe "mutually-recursive types" do
-    test "struct A.t() <-> struct B.t() resolves. The back-reference is a truncated struct ref" do
+    test "struct A.t() <-> struct B.t() resolves; the back-reference is a truncated struct ref" do
       # credo:disable-for-next-line Credo.Check.Design.AliasUsage
       result = Walker.walk(quote do: RpcElixir.WalkerTest.Fixtures.CycleA.t())
       assert result.kind == "object"

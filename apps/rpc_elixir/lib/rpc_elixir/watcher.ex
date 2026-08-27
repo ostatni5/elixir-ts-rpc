@@ -1,41 +1,48 @@
 defmodule RpcElixir.Watcher do
   @moduledoc """
-  Dev-only GenServer that watches every source file contributing to an RPC
-  router, the router module itself and every handler module, and triggers
-  recompilation when one of them changes.
+  Dev-only GenServer that triggers recompilation on router source changes.
 
-  Requires the optional `:file_system` dep. If it is not loaded, `init/1`
-  returns `:ignore`, the process is never started, after emitting a warning.
+  It watches the router's own source file and every handler module's source
+  file, via `RpcElixir.Router.source_files/1`. Middleware and custom-type
+  modules are not watched, even though editing them changes the output.
 
-  This watcher is Phoenix-specific: without an `:endpoint` or `:on_change`
-  option there is nothing to do when a file changes. For non-Phoenix apps the
-  `Mix.Tasks.Compile.ElixirTsRpc` compiler already regenerates the TypeScript
-  client on each Elixir recompile. You do not need this watcher.
+  Requires the optional `:file_system` dep. Without it, `init/1` warns and
+  returns `:ignore`. The process never starts.
+
+  It is Phoenix-specific. Without `:endpoint` or `:on_change` there is nothing
+  to do on a change. Non-Phoenix apps do not need it.
+  `Mix.Tasks.Compile.ElixirTsRpc` already regenerates the client on each Elixir
+  recompile.
 
   ## Usage
 
       # lib/my_app/application.ex  (Phoenix projects only)
       children = [
-        # …
         {RpcElixir.Watcher, router: MyApp.Router, endpoint: MyAppWeb.Endpoint}
       ]
 
   ## Options
 
-    * `:router` (required), the RPC router module.
-    * `:endpoint`, a Phoenix endpoint. The watcher calls
-      `Phoenix.CodeReloader.reload/1` on each relevant change.
-    * `:on_change`, `{mod, fun, args}` invoked on change.
-      Takes precedence over `:endpoint` when both are given.
-    * `:debounce_ms`, milliseconds to coalesce rapid file events before
-      triggering a reload. Defaults to `200`.
+    * `:router` (required) — the RPC router module. A missing `:router` raises
+      `KeyError`, even when `:file_system` is absent.
+    * `:endpoint` — a Phoenix endpoint. The watcher calls
+      `Phoenix.CodeReloader.reload/1` on each relevant change. That reloads
+      only the endpoint's `:reloadable_compilers`, which by default excludes
+      `:elixir_ts_rpc`. So add it there, or the client is not regenerated:
+
+          reloadable_compilers: [:gettext, :elixir, :app, :elixir_ts_rpc]
+
+      Use `:on_change` instead to call codegen directly.
+    * `:on_change` — `{mod, fun, args}` invoked on change. Takes precedence
+      over `:endpoint` when both are given.
+    * `:debounce_ms` — coalesces rapid file events. Defaults to `200`.
 
   ## Restart expectations
 
-  `RpcElixir.Watcher` traps exits so that it can clean up on supervisor
-  shutdown. The linked `FileSystem` process is started inside `init/1`. If it
-  crashes unexpectedly the watcher will also terminate and the supervisor is
-  expected to restart the pair.
+  The linked `FileSystem` process starts inside `init/1`. The watcher traps
+  exits, so a `FileSystem` crash arrives as a message rather than killing the
+  watcher silently. The watcher then stops with `{:filesystem_exited, reason}`.
+  The supervisor is expected to restart the pair.
   """
 
   use GenServer
@@ -45,6 +52,12 @@ defmodule RpcElixir.Watcher do
 
   @default_debounce_ms 200
 
+  @doc """
+  Starts the watcher and links it to the caller.
+
+  `opts` takes the module options listed above, plus `:name`. The default name
+  is `RpcElixir.Watcher`. Returns `:ignore` when `:file_system` is not loaded.
+  """
   def start_link(opts) do
     GenServer.start_link(__MODULE__, opts, name: Keyword.get(opts, :name, __MODULE__))
   end
@@ -80,7 +93,7 @@ defmodule RpcElixir.Watcher do
          pending_timer: nil
        }}
     else
-      Logger.warning("[rpc_elixir] :file_system dep not loaded, RpcElixir.Watcher disabled")
+      Logger.warning("[rpc_elixir] :file_system dep not loaded — RpcElixir.Watcher disabled")
       :ignore
     end
   end
@@ -124,12 +137,12 @@ defmodule RpcElixir.Watcher do
   end
 
   defp trigger(%{on_change: {m, f, a}}) when is_atom(m) and is_atom(f) and is_list(a) do
-    Logger.info("[rpc_elixir] source changed, invoking on_change callback")
+    Logger.info("[rpc_elixir] source changed — invoking on_change callback")
     apply(m, f, a)
   end
 
   defp trigger(%{endpoint: endpoint}) when is_atom(endpoint) and not is_nil(endpoint) do
-    Logger.info("[rpc_elixir] source changed, reloading via #{inspect(endpoint)}")
+    Logger.info("[rpc_elixir] source changed — reloading via #{inspect(endpoint)}")
 
     if Code.ensure_loaded?(Phoenix.CodeReloader) do
       case Phoenix.CodeReloader.reload(endpoint) do
@@ -137,7 +150,7 @@ defmodule RpcElixir.Watcher do
         {:error, reason} -> Logger.warning("[rpc_elixir] reload failed: #{inspect(reason)}")
       end
     else
-      Logger.warning("[rpc_elixir] Phoenix.CodeReloader not available, skipping reload")
+      Logger.warning("[rpc_elixir] Phoenix.CodeReloader not available — skipping reload")
     end
   end
 

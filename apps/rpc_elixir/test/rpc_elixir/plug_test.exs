@@ -28,7 +28,7 @@ defmodule RpcElixir.PlugTest.CookieMiddleware do
         Resolution.assign(res, :captured_remote_ip, ip)
 
       :capture_session ->
-        # Indexing the session would raise if it were nil. Proves normalization
+        # Indexing the session would raise if it were nil; proves normalization
         # to %{} when Plug.Session isn't configured.
         _ = res.ctx.req.session[:anything]
         Resolution.assign(res, :captured_session, res.ctx.req.session)
@@ -104,6 +104,7 @@ defmodule RpcElixir.PlugTest do
   import Plug.Test
   import Plug.Conn
 
+  alias RpcElixir.JSON
   alias RpcElixir.PlugTest.NoSessionPipeline
   alias RpcElixir.PlugTest.Router, as: TestRouter
 

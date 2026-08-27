@@ -1,45 +1,38 @@
 defmodule RpcElixir.Handler do
   @moduledoc """
-  Captures `@spec` and `@type` ASTs at handler-compile time and exposes them
-  via `__rpc_specs__/0` / `__rpc_types__/0` accessors.
+  Captures `@spec` and `@type` ASTs at handler-compile time. Exposes them
+  through the `__rpc_specs__/0` and `__rpc_types__/0` accessors.
 
   ## Why this exists
 
   `RpcElixir.Router` validates handler signatures inside `__before_compile__`.
-  By default it reads them from the handler's BEAM file via
-  `Code.Typespec.fetch_specs/1`, which only works after the BEAM is on disk.
-  Inside a single Mix project, the parallel compiler may run the router's
-  compile-time hook before in-progress handler BEAMs are flushed, producing
-  spurious "no @spec" errors.
+  By default it reads specs from the handler's BEAM file. That path uses
+  `Code.Typespec.fetch_specs/1`, which needs the BEAM on disk. Inside a single
+  Mix project, the parallel compiler may run the router hook too early.
+  In-progress handler BEAMs are not flushed yet. The result is a spurious
+  "no @spec" error.
 
-  When a handler does `use RpcElixir.Handler`, this macro captures the spec
-  ASTs into a generated function. The router (via `RpcElixir.Types.FromSpec`)
-  prefers that accessor when it exists, and the resulting function-call edge
-  forces the parallel compiler to fully compile the handler module before
-  using it, without requiring the BEAM to be on disk.
+  `use RpcElixir.Handler` avoids this. It captures the spec ASTs into a
+  generated function. `RpcElixir.Types.FromSpec` prefers that accessor when it
+  exists. The function call is also a compiler dependency edge. So the parallel
+  compiler finishes the handler module first. The BEAM need not be on disk.
 
-  Without `use RpcElixir.Handler`, the framework still works but requires the
-  handler to live in a separate Mix `path:` dep so its BEAM is on disk first.
+  Without `use`, the framework still works. But the handler must then live in a
+  separate Mix `path:` dep. Its BEAM lands on disk first that way.
 
-  ## Input keys are atoms
+  `RpcElixir.Router.expose/2` also requires it. Exposing a module reads its
+  surface from `__rpc_specs__/0`, so a handler without `use` raises there.
 
-  The `input` argument received by every handler function has **atom keys**
-  (e.g. `%{id: "abc"}`), never string keys. Pattern-match and access
-  accordingly:
-
-      def get(%{id: id}, _ctx), do: ...   # correct
-      def get(%{"id" => id}, _ctx), do: ... # wrong, key will be absent
-
-  ## Usage
-
-      defmodule MyApp.Handlers.Users do
-        use RpcElixir.Handler
-
-        @spec list(input :: %{}, ctx :: map()) :: {:ok, %{users: [%{id: String.t()}]}}
-        def list(_input, _ctx), do: {:ok, %{users: []}}
-      end
+  Handler input arrives with atom keys. See `RpcElixir.Types.validate/2`. For a
+  handler example, see [Getting started](getting-started.md).
   """
 
+  @doc """
+  Sets up spec capture for a handler module.
+
+  Generates `__rpc_specs__/0` and `__rpc_types__/0` from the module's `@spec`
+  and `@type` attributes.
+  """
   defmacro __using__(_opts) do
     quote do
       @before_compile RpcElixir.Handler
@@ -47,13 +40,11 @@ defmodule RpcElixir.Handler do
   end
 
   defmacro __before_compile__(env) do
-    public_defs = MapSet.new(Module.definitions_in(env.module, :def))
-
     specs =
       env.module
       |> collect_specs()
       |> Map.filter(fn {{name, arity}, _ast} ->
-        arity in [1, 2] and MapSet.member?(public_defs, {name, arity})
+        arity in [1, 2] and Module.defines?(env.module, {name, arity}, :def)
       end)
 
     types = collect_types(env.module)
@@ -114,7 +105,7 @@ defmodule RpcElixir.Handler do
         do: result
   end
 
-  # @type name :: body, zero-arity, var ctx is an atom (e.g. nil or Elixir env)
+  # @type name :: body — zero-arity, var ctx is an atom (e.g. nil or Elixir env)
   defp type_entry(kind, {kind, {:"::", _, [{name, _, ctx}, body]}, _})
        when is_atom(name) and is_atom(ctx) do
     [{{name, 0}, {[], body}}]

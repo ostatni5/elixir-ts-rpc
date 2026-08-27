@@ -26,11 +26,11 @@ defmodule RpcElixir.HandlerTest do
     @spec page_users(input :: %{}, ctx :: %{}) :: {:ok, page(user())}
     def page_users(_input, _ctx), do: {:ok, %{items: [], next: nil}}
 
-    # Private function with @spec - should NOT appear in __rpc_specs__/0.
+    # Private function with @spec — should NOT appear in __rpc_specs__/0.
     @spec _helper(integer()) :: integer()
     defp _helper(x), do: _bump(x)
 
-    # Public arity-1 - allowed (future no-ctx handler shape).
+    # Public arity-1 — allowed (future no-ctx handler shape).
     @spec arity_one(input :: %{}) :: {:ok, %{}}
     def arity_one(_input), do: {:ok, %{}}
 
@@ -119,7 +119,7 @@ defmodule RpcElixir.HandlerTest do
     test "FromSpec still resolves via Code.Typespec.fetch_specs for legacy handlers" do
       # `RpcElixir.TypespecFixtures.Handlers` is a support-file module that does
       # NOT use RpcElixir.Handler. The full surface is exercised by
-      # `from_spec_test.exs`. This assertion just locks in the fact that the
+      # `from_spec_test.exs`; this assertion just locks in the fact that the
       # in-module accessor is genuinely absent and the BEAM path still works.
       refute function_exported?(RpcElixir.TypespecFixtures.Handlers, :__rpc_specs__, 0)
 

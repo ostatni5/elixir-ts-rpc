@@ -105,7 +105,7 @@ defmodule BasicServerTest do
       assert length(users) == 2
 
       bob = Enum.find(users, &(&1["id"] == "bob"))
-      # account_id is a 64-bit id sent as a string (branded Int64String), it must
+      # account_id is a 64-bit id sent as a string (branded Int64String) — it must
       # never serialize to a JSON number, which would silently lose precision.
       assert bob["account_id"] == "9007199254740993"
       assert is_binary(bob["account_id"])
@@ -180,7 +180,7 @@ defmodule BasicServerTest do
         |> with_session_cookie(cookie)
         |> call()
 
-      # :invalid_email is a typed handler error, the framework maps it to 400.
+      # :invalid_email is a typed handler error — the framework maps it to 400.
       assert update_conn.status == 400
       body = decode(update_conn)
       assert body["error"]["code"] == "invalid_email"
@@ -241,7 +241,7 @@ defmodule BasicServerTest do
   end
 
   describe "auth.logout" do
-    test "clears session, subsequent auth.me returns 401" do
+    test "clears session; subsequent auth.me returns 401" do
       login_conn =
         make_conn("/auth/login", ~s({"username":"alice","password":"wonderland"}))
         |> call()

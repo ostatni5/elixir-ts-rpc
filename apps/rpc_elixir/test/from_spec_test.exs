@@ -27,7 +27,7 @@ defmodule RpcElixir.Types.FromSpecTest do
       assert match?({:|, _, _}, return_ast)
     end
 
-    test "leaves the ctx arg as raw AST - it is not part of the wire contract" do
+    test "leaves the ctx arg as raw AST — it is not part of the wire contract" do
       assert {:ok, %{args: [_input, ctx_ast]}} = FromSpec.fetch_spec(Handlers, :get_user, 2)
       assert match?({:%{}, _, []}, ctx_ast)
     end
@@ -99,7 +99,7 @@ defmodule RpcElixir.Types.FromSpecTest do
       assert match?(%{kind: "list"}, output)
     end
 
-    test "tolerates a non-wire ctx type (e.g. a struct) - ctx is not part of the contract" do
+    test "tolerates a non-wire ctx type (e.g. a struct) — ctx is not part of the contract" do
       assert {:ok, %{input: input, output: output, error: nil}} =
                FromSpec.fetch_rpc(Handlers, :with_struct_ctx)
 

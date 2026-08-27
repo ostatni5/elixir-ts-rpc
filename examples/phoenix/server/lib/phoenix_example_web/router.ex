@@ -39,7 +39,7 @@ defmodule PhoenixExampleWeb.Router do
   scope "/" do
     pipe_through :rpc
 
-    # `path_prefix: "/rpc"` matches the mount path. `RpcElixir.Plug` strips it
+    # `path_prefix: "/rpc"` matches the mount path; `RpcElixir.Plug` strips it
     # from `conn.request_path` to derive the procedure name. CSRF is Phoenix's
     # job here, so the plug's own content-type CSRF defense is turned off.
     forward "/rpc", RpcElixir.Plug,

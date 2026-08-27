@@ -12,7 +12,7 @@ defmodule RpcElixir.Codegen.Brands do
                     {b.kind, {b.ts_brand, Builtins.brand_decl(b.ts_brand, b.ts_base)}}
                   end)
 
-  @brand_doc "/** Branded wire value, nominally distinct from its base type. The client does not auto-convert it. */\n"
+  @brand_doc "/** Branded wire value — nominally distinct from its base type; the client does not auto-convert it. */\n"
 
   @builtin_brand_names @builtin_brands |> Map.values() |> Enum.map(&elem(&1, 0)) |> MapSet.new()
 

@@ -1,92 +1,80 @@
 defmodule RpcElixir.Plug do
   @moduledoc """
-  HTTP transport adapter for `RpcElixir` implemented as a `Plug`.
+  HTTP transport adapter for `RpcElixir`, implemented as a `Plug`.
 
-  Mounts a router module at a configurable path prefix, decodes JSON bodies,
-  dispatches to the procedure pipeline, drains response cookies and headers
-  onto the conn, and renders JSON responses.
+  It mounts a router at a path prefix. It decodes JSON bodies and dispatches to
+  the procedure pipeline. It drains response cookies and headers onto the conn,
+  then renders JSON. See [Getting started](getting-started.md) for the mounting
+  walkthrough.
 
   ## Options
 
-    * `:router` (required), module using `RpcElixir.Router`.
-    * `:path_prefix` (optional, default `"/rpc"`), the prefix to strip from
-      the request path before procedure dispatch. A request to
-      `POST /rpc/users.get` dispatches procedure `"users.get"`.
-    * `:ctx_builder` (optional), `(Plug.Conn.t() -> RpcElixir.Context.t())`.
-      When provided, the returned context is used as the base, but the
-      transport always overwrites its `:req` field with conn-derived metadata
-      (cookies, headers, remote_ip, session), so those fields are always
-      present regardless of what the builder returns.
-    * `:max_body_size` (optional, default 8 MB), maximum request body size in
-      bytes. Bodies exceeding this are rejected with 413 `:payload_too_large`.
-    * `:max_body_depth` (optional, default 64), maximum structural nesting
-      depth of the decoded JSON body. Payloads nested deeper are rejected with
-      400 `:input_validation_failed` before validation runs, bounding stack and
+    * `:router` (required) — a module using `RpcElixir.Router`.
+    * `:path_prefix` (optional, default `"/rpc"`) — stripped from the request
+      path before dispatch. `POST /rpc/users.get` dispatches `"users.get"`.
+    * `:ctx_builder` (optional) — `(Plug.Conn.t() -> RpcElixir.Context.t())`.
+      Its result is the base context. The transport always overwrites `:req`
+      with conn-derived metadata (cookies, headers, remote_ip, session). Those
+      fields are always present, whatever the builder returns.
+    * `:max_body_size` (optional, default 8 MB) — request body cap in bytes.
+      Larger bodies are rejected with 413 `:payload_too_large`.
+    * `:max_body_depth` (optional, default 64) — nesting-depth cap on the
+      decoded JSON body. Deeper payloads are rejected with 400
+      `:input_validation_failed`, before validation runs. This bounds stack and
       CPU use that the byte cap alone cannot.
-    * `:require_content_type` (optional, default `true`), when `true`, requests
-      must carry a `content-type` of `application/json` (charset/params allowed).
-      Otherwise they are rejected with 415 `:unsupported_media_type`. See
-      `## Security / CSRF`.
-    * `:allowed_origins` (optional, default `nil` = disabled), when set to a
-      list of origin strings, a request carrying an `origin` header not in the
-      list is rejected with 403 `:forbidden`. See `## Security / CSRF`.
+    * `:require_content_type` (optional, default `true`) — the request must
+      carry `content-type: application/json`. A charset and other params are
+      allowed. Other types are rejected with 415 `:unsupported_media_type`.
+      See `## Security / CSRF`.
+    * `:allowed_origins` (optional, default `nil` = disabled) — allow-list of
+      origin strings. An `origin` header outside the list is rejected with 403
+      `:forbidden`. See `## Security / CSRF`.
 
   ## Security / CSRF
 
-  This adapter dispatches state-changing RPC over `POST` and can pair with
+  This adapter dispatches state-changing RPC over `POST`. It can pair with
   cookie-based sessions (see `## Session integration`). That combination is a
-  CSRF surface: a cross-site page can auto-submit a form to an RPC endpoint and
-  the browser will attach the session cookie, so without a defense an attacker
-  could trigger authenticated calls.
-
-  Two mitigations are enforced here:
+  CSRF surface. A cross-site page can auto-submit a form to an RPC endpoint.
+  The browser then attaches the session cookie. Undefended, that lets an
+  attacker trigger authenticated calls. Two mitigations are enforced here:
 
     * **Content-Type enforcement** (`:require_content_type`, default `true`).
-      Requiring `application/json` means a request can no longer be a "simple"
-      cross-site request. Browsers must send a CORS preflight that the server
-      never approves, and HTML forms (which can only send
+      Requiring `application/json` stops the request being a "simple"
+      cross-site request. Browsers must then send a CORS preflight, which the
+      server never approves. HTML forms can only send
       `application/x-www-form-urlencoded`, `multipart/form-data`, or
-      `text/plain`) are blocked outright. This is the primary CSRF defense.
+      `text/plain`. They are blocked outright. This is the primary CSRF defense.
     * **Origin allow-listing** (`:allowed_origins`, default disabled). When
-      configured, requests whose `origin` header is present but not allow-listed
-      are rejected with 403. This is defense-in-depth for browsers that send
-      `Origin` on state-changing requests.
+      configured, a present but non-allow-listed `origin` is rejected with 403.
+      This is defense-in-depth for browsers that send `Origin` on
+      state-changing requests.
 
-  The bundled JS client always sends `Content-Type: application/json`, so the
-  default-on enforcement does not affect legitimate usage.
+  The bundled JS client always sends `Content-Type: application/json`. So the
+  default-on enforcement does not break legitimate use.
 
   ## Session integration
 
-  To enable session support, configure `Plug.Session` earlier in your pipeline.
-  The adapter reads the session into `ctx.req.session` and drains
-  `Resolution.resp_session` back into the session after dispatch.
+  Configure `Plug.Session` earlier in your pipeline. The adapter reads it into
+  `ctx.req.session`. It drains `Resolution.resp_session` back after dispatch.
 
       defmodule MyApp.Router do
         use Plug.Builder
 
         plug Plug.Session,
-          store: :cookie,
-          key: "_my_app_session",
-          signing_salt: "my_salt"
+          store: :cookie, key: "_my_app_session", signing_salt: "my_salt"
 
         plug :fetch_session
         plug RpcElixir.Plug, router: MyApp.RpcRouter
       end
 
-  Within middleware, use `Resolution.put_session/3`, `delete_session/2`, or
-  `clear_session/1` to modify the session. Read session data via
-  `res.ctx.req[:session]`.
-
-  ## Example
-
-      plug RpcElixir.Plug, router: MyApp.RpcRouter
+  In middleware, use `Resolution.put_session/3`, `delete_session/2`, or
+  `clear_session/1` to change the session. Read it via `res.ctx.req[:session]`.
 
   ## Response draining order
 
-  After dispatch, session mutations, cookies, and headers are all applied to
-  the conn before `render_result` writes the response body. This ordering is
-  required by Plug: session and cookie mutations must precede the response.
-
+  After dispatch, session mutations, cookies, and headers are applied to the
+  conn first. The response body is written only after that. Plug requires this
+  order: session and cookie mutations must precede the response.
   """
 
   @behaviour Plug
@@ -95,12 +83,12 @@ defmodule RpcElixir.Plug do
 
   import Plug.Conn
 
-  alias RpcElixir.{Context, Dispatcher, Resolution, RpcError}
+  alias RpcElixir.{Context, Dispatcher, JSON, Resolution, RpcError}
 
   @default_max_body_size 8 * 1024 * 1024
   # Read in 1 MB chunks rather than one slurp to avoid memory spikes.
   @read_chunk_size 1024 * 1024
-  # The byte cap bounds payload size but not nesting. A deeply-nested JSON
+  # The byte cap bounds payload size but not nesting; a deeply-nested JSON
   # document can still exhaust the stack during recursive validation. Reject
   # anything past this structural depth right after decode.
   @default_max_body_depth 64
@@ -436,7 +424,7 @@ defmodule RpcElixir.Plug do
 
   # Framework codes resolve via the shared map on RpcError (single source of
   # truth). `:not_found` is a conventional user-defined typed code that the
-  # transport maps to 404. Everything else defaults to 400.
+  # transport maps to 404; everything else defaults to 400.
   defp status_for_code(code, _details) do
     cond do
       status = RpcError.status_for(code) -> status

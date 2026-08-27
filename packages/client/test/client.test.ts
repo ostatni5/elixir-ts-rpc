@@ -2,11 +2,14 @@ import { describe, expect, it, vi } from "vitest";
 import { combineSignals, combineSignalsPolyfill } from "../src/abort.js";
 import type { Client, RpcInterceptor } from "../src/index.js";
 import {
+  buildProxy,
   createClient,
+  deriveKey,
   isDomainError,
   isFrameworkError,
   isMiddlewareError,
   isRpcError,
+  isRpcMethod,
   isTransportError,
   RpcError,
   rpcMethod,
@@ -28,7 +31,7 @@ function rejectingFetch(message: string) {
   });
 }
 
-describe("createClient - successful round-trip", () => {
+describe("createClient — successful round-trip", () => {
   it("resolves with the `ok` field from the response body", async () => {
     const fetch = mockFetch(200, { ok: { id: 1, name: "Alice" } });
     const client = createClient({ baseUrl: "/rpc", fetch });
@@ -49,7 +52,7 @@ describe("createClient - successful round-trip", () => {
   });
 });
 
-describe("createClient - error envelopes", () => {
+describe("createClient — error envelopes", () => {
   it("throws RpcError for 4xx error envelope", async () => {
     const fetch = mockFetch(422, {
       error: { code: "validation_error", message: "bad input", details: { field: "email" } },
@@ -88,7 +91,7 @@ describe("createClient - error envelopes", () => {
   });
 });
 
-describe("createClient - network failure", () => {
+describe("createClient — network failure", () => {
   it("throws RpcError(network_error, status 0) when fetch rejects", async () => {
     const fetch = rejectingFetch("Failed to fetch");
     const client = createClient({ baseUrl: "/rpc", fetch });
@@ -100,7 +103,7 @@ describe("createClient - network failure", () => {
   });
 });
 
-describe("createClient - abort handling", () => {
+describe("createClient — abort handling", () => {
   it("per-call signal abort throws RpcError(aborted)", async () => {
     const controller = new AbortController();
     const fetch = vi.fn(async (_url: string, init?: RequestInit): Promise<Response> => {
@@ -137,7 +140,7 @@ describe("createClient - abort handling", () => {
   });
 });
 
-describe("combineSignals polyfill - signal already aborted before call", () => {
+describe("combineSignals polyfill — signal already aborted before call", () => {
   it("throws RpcError(aborted) when client-level signal was already aborted before call", async () => {
     const controller = new AbortController();
     controller.abort();
@@ -175,7 +178,7 @@ describe("combineSignals polyfill - signal already aborted before call", () => {
   });
 });
 
-describe("createClient - headers merging", () => {
+describe("createClient — headers merging", () => {
   it("merges static headers with per-call headers, per-call wins", async () => {
     const fetch = mockFetch(200, { ok: true });
     const client = createClient({
@@ -202,7 +205,7 @@ describe("createClient - headers merging", () => {
   });
 });
 
-describe("createClient - credentials", () => {
+describe("createClient — credentials", () => {
   it("defaults credentials to `same-origin`", async () => {
     const fetch = mockFetch(200, { ok: null });
     const client = createClient({ baseUrl: "/rpc", fetch });
@@ -228,7 +231,7 @@ describe("createClient - credentials", () => {
   });
 });
 
-describe("createClient - baseUrl joining", () => {
+describe("createClient — baseUrl joining", () => {
   it("handles trailing slash on baseUrl", async () => {
     const fetch = mockFetch(200, { ok: true });
     const client = createClient({ baseUrl: "/rpc/", fetch });
@@ -271,7 +274,7 @@ describe("createClient - baseUrl joining", () => {
   });
 });
 
-describe("combineSignals polyfill - listener cleanup", () => {
+describe("combineSignals polyfill — listener cleanup", () => {
   it("removes the listener from the sibling signal after one fires", () => {
     // Exercise the polyfill directly so the assertion holds regardless of
     // whether the runtime has native AbortSignal.any.
@@ -282,7 +285,7 @@ describe("combineSignals polyfill - listener cleanup", () => {
     combineSignalsPolyfill([longLived.signal, perCall.signal]);
 
     // Aborting the short-lived signal must remove the listener it left on the
-    // long-lived one, otherwise listeners accumulate for the client's lifetime.
+    // long-lived one — otherwise listeners accumulate for the client's lifetime.
     perCall.abort();
 
     expect(removeSpy).toHaveBeenCalledWith("abort", expect.any(Function));
@@ -379,7 +382,7 @@ describe("isRpcError", () => {
 
     expect(isRpcError(err)).toBe(true);
     if (isRpcError(err)) {
-      // `code` is a plain string here, a synthesized one, not a domain code.
+      // `code` is a plain string here — a synthesized one, not a domain code.
       expect(err.code).toBe("network_error");
     }
   });
@@ -485,7 +488,7 @@ describe("error source category", () => {
   });
 });
 
-describe("createClient - onError hook", () => {
+describe("createClient — onError hook", () => {
   it("fires with (error, { procedure, input }) on a middleware error and the call still rejects", async () => {
     const onError = vi.fn();
     const fetch = mockFetch(401, {
@@ -609,7 +612,7 @@ describe("createClient - onError hook", () => {
   });
 });
 
-describe("createClient - interceptors", () => {
+describe("createClient — interceptors", () => {
   function tokenAwareFetch() {
     return vi.fn(async (_url: string, init?: RequestInit): Promise<Response> => {
       const authorized = new Headers(init?.headers).get("authorization") === "Bearer fresh";
@@ -758,5 +761,37 @@ describe("createClient - interceptors", () => {
 
     await expect(client.call("noop", {})).rejects.toThrow("interceptor boom");
     expect(fetch).not.toHaveBeenCalled();
+  });
+});
+
+describe("adapter core", () => {
+  const client: Client = { call: async () => undefined };
+
+  it("isRpcMethod distinguishes generated methods from namespace objects", () => {
+    expect(isRpcMethod(rpcMethod(client, "users.list"))).toBe(true);
+    expect(isRpcMethod({ list: rpcMethod(client, "users.list") })).toBe(false);
+    expect(isRpcMethod(() => undefined)).toBe(false);
+    expect(isRpcMethod(null)).toBe(false);
+  });
+
+  it("deriveKey appends input, or yields the bare prefix when omitted", () => {
+    expect(deriveKey(["users", "list"], { since: 5 })).toEqual(["users", "list", { since: 5 }]);
+    expect(deriveKey(["users", "list"])).toEqual(["users", "list"]);
+  });
+
+  it("buildProxy replaces each method leaf while preserving namespace shape", () => {
+    const generated = {
+      auth: { me: rpcMethod(client, "auth.me") },
+      users: { list: rpcMethod(client, "users.list") },
+    };
+    const seen: string[] = [];
+    const proxy = buildProxy(generated, (_method, path) => {
+      seen.push(path.join("."));
+      return { path };
+    }) as { auth: { me: { path: string[] } }; users: { list: { path: string[] } } };
+
+    expect(seen.sort()).toEqual(["auth.me", "users.list"]);
+    expect(proxy.auth.me.path).toEqual(["auth", "me"]);
+    expect(proxy.users.list.path).toEqual(["users", "list"]);
   });
 });

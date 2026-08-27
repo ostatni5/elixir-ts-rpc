@@ -1,28 +1,59 @@
 defmodule RpcElixir.Types.FromInferred do
   @moduledoc """
-  EXPERIMENTAL backend that reads signatures inferred by Elixir's set-theoretic
-  type system from the `ExCk` BEAM chunk, instead of user-written `@spec`.
+  EXPERIMENTAL backend. It reads signatures inferred by Elixir's set-theoretic
+  type system. The source is the `ExCk` BEAM chunk, not user-written `@spec`.
 
-  Not the recommended path. Use `RpcElixir.Types.FromSpec` for any real
-  workload. This module exists so we can track the new type system as it
-  evolves toward a public introspection API.
+  Not the recommended path. Use `RpcElixir.Types.FromSpec` for real work. This
+  module tracks the type system as it evolves toward a public API.
 
   Hard caveats:
 
-  * **Private API.** `ExCk` chunk format and the `Module.Types.Descr` term
-    shape are both undocumented compiler internals. The chunk version
-    (`:elixir_checker_v3` on Elixir 1.19) and `Descr` shape have changed
-    every minor release. Expect breakage on upgrade.
-  * **Requires `Code.compiler_options(infer_signatures: true)`** at compile
-    time of the *target* module. Without it the chunk only carries function
-    names, not signatures.
-  * **Inference is lossy.** Most argument types come back as `dynamic` unless
-    the function pattern-matches or guards on input. Returns fare better.
-  * **Anything we can't translate becomes `%{kind: "dynamic"}`** rather than
-    raising, so calling code can decide whether to fall back to `FromSpec`.
+  * **Requires Elixir 1.19 or later.** Set-theoretic signatures do not exist
+    before that, so every lookup returns `{:error, :no_signature}` on older
+    versions. The library itself supports Elixir 1.17+, but this backend does
+    not. Its own tests carry the `:requires_inference` tag and are excluded
+    below 1.19 (see `test/test_helper.exs`).
+  * **Private API.** The `ExCk` chunk format and `Module.Types.Descr` shape are
+    undocumented compiler internals. The chunk version is
+    `:elixir_checker_v3` on Elixir 1.19. Both have changed every minor release,
+    so expect breakage on upgrade.
+  * **Requires `Code.compiler_options(infer_signatures: true)`** when the
+    *target* module compiles. Without it the chunk carries only function names.
+    Enable it in your own `mix.exs`:
+
+        defmodule MyApp.MixProject do
+          use Mix.Project
+
+          Code.compiler_options(infer_signatures: true)
+
+          def project, do: [...]
+        end
+
+  * **Inference is lossy.** Most argument types come back as `dynamic`. You get
+    more only when the function pattern-matches or guards on input. Returns
+    fare better.
+  * **Anything untranslatable becomes `%{kind: "dynamic"}`**, not a raise. So
+    callers can fall back to `FromSpec`.
+
+  ## Gaps versus `FromSpec`
+
+  | Area                   | Behaviour                                          |
+  | ---------------------- | -------------------------------------------------- |
+  | Arguments              | usually `dynamic`, unless the function pattern-matches or guards on them |
+  | Lists                  | collapse to `dynamic`; no `list` kind              |
+  | `T \\| nil`             | nullability is dropped                             |
+  | Optional map keys      | map openness is ignored, so all fields look required |
+  | Module identity        | lost: no `:struct` tag, no built-in date or decimal resolution, no Ecto schema derivation, and `wire_spec/0` is never consulted |
+  | `any()` / `term()`     | become `dynamic` instead of raising                |
+  | `integer() \\| float()` | widened to `primitive` / `float`                   |
+  | Multi-clause functions | only the first inferred clause survives             |
+  | `{:error, E}` branches | unprovable unless the body returns one, so `error` comes back as `nil` |
+
+  What it does recover: atom-literal enums (`:a | :b`) become `enum`. An RPC
+  return is decomposed when it contains an `{:ok, T}` tuple.
   """
 
-  @doc "Returns the inferred argument and return type maps for the given MFA, or `{:error, :no_signature}` if unavailable."
+  @doc "Returns the inferred argument and return type maps for an MFA. Gives `{:error, :no_signature}` when unavailable."
   @spec fetch_signature(module(), atom(), non_neg_integer()) ::
           {:ok,
            %{args: [RpcElixir.Types.internal_spec()], return: RpcElixir.Types.internal_spec()}}
@@ -43,10 +74,10 @@ defmodule RpcElixir.Types.FromInferred do
   @doc """
   Convenience for the RPC convention `call(input, context) :: {:ok, output}`.
 
-  Inference cannot prove an `{:error, _}` branch unless the body explicitly
-  returns one, so the recovered shape is usually a single `{:ok, T}` tuple.
-  Returns `{:ok, %{input: t, output: t, error: t | nil}}` when that pattern
-  is recognized, else `{:error, {:invalid_return, t}}`.
+  Inference cannot prove an `{:error, _}` branch unless the body returns one.
+  So the recovered shape is usually a single `{:ok, T}` tuple. Returns
+  `{:ok, %{input: t, output: t, error: t | nil}}` when that pattern is
+  recognized, else `{:error, {:invalid_return, t}}`.
   """
   @spec fetch_rpc(module(), atom()) ::
           {:ok,

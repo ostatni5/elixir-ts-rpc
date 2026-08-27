@@ -9,9 +9,11 @@
     "includes": [
       "packages/**/*.{ts,tsx,js,jsx}",
       "examples/**/client/**/*.{ts,tsx,js,jsx}",
+      "examples/playground/assets/**/*.{js,mjs}",
       "docs/**/*.{ts,mts,tsx,js,mjs,jsx}",
       "!**/dist",
-      "!**/*.gen.ts"
+      "!**/*.gen.ts",
+      "!docs/.vitepress/twoslash/rpc.generated.ts"
     ]
   },
   "formatter": {

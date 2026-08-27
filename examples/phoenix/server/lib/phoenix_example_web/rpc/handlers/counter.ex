@@ -1,6 +1,6 @@
 defmodule PhoenixExampleWeb.Rpc.Handlers.Counter do
   @moduledoc """
-  A per-user counter - the example's mutating procedure.
+  A per-user counter — the example's mutating procedure.
 
   Handlers can't write to the HTTP response (no cookies/headers), but they may
   write to the database, so a state-changing procedure like `adjust` fits the

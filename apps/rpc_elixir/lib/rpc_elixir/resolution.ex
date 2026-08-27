@@ -5,30 +5,37 @@ defmodule RpcElixir.Resolution do
 
   ## Field ownership
 
-  Different fields have different writers, keeping the struct single but
-  partitioning who touches what (mirroring `Plug.Conn`):
+  One struct holds everything. Each field has its own writer. Ownership
+  mirrors `Plug.Conn`:
 
-    * `:ctx`, middleware and the dispatcher both write. Use `put_ctx/3`,
-      `assign/3` (application data), or `put_private/3` (framework data on
-      the context). Read by handlers.
-    * `:params`, `:private`, middleware-owned. Use `put_private/3` for
-      framework-internal scratch data.
-    * `:state`, set to `:halted` only via `halt/2`. Never set directly.
-    * `:result`, **dispatcher-owned.** Middleware should not write to it
-      directly. Use `halt/2` to short-circuit with an error. Direct writes
+    * `:ctx` — the transport sets it at construction. Middleware updates it
+      with `put_ctx/3` or `assign/3`. Read by handlers.
+    * `:private` — middleware-owned. Use `put_private/3` for framework-internal
+      scratch data. Handlers never see it, because they receive only `:ctx`.
+    * `:params` — reserved for middleware. The framework does not read or
+      write it; validated input goes straight to the handler.
+    * `:state` — set to `:halted` only via `halt/2`. Never set directly.
+    * `:result` — **dispatcher-owned.** Middleware should not write to it
+      directly; use `halt/2` to short-circuit with an error. Direct writes
       pre-dispatch are clobbered by the handler step.
-    * `:procedure`, set at construction time, never mutated.
-    * `:resp_cookies`, middleware-writable. Use `put_resp_cookie/4` or
+    * `:procedure` — set at construction time, never mutated.
+    * `:resp_cookies` — middleware-writable. Use `put_resp_cookie/4` or
       `delete_resp_cookie/3`. The transport adapter drains this onto the
       response after dispatch. Format: `%{name => {value, opts}}` for set,
       `%{name => {:delete, opts}}` for delete.
-    * `:resp_headers`, middleware-writable. Use `put_resp_header/3`. The
+    * `:resp_headers` — middleware-writable. Use `put_resp_header/3`. The
       transport adapter appends these to the response. Duplicates are allowed
       (e.g. multiple `Set-Cookie` values). Format: `[{name, value}]`.
-    * `:resp_session`, middleware-writable. Use `put_session/3`,
+    * `:resp_session` — middleware-writable. Use `put_session/3`,
       `delete_session/2`, or `clear_session/1`. The transport adapter drains
       this into the Plug session after dispatch. Requires `Plug.Session` to be
-      configured earlier in the pipeline.
+      configured earlier in the pipeline. Keys must be atoms or strings, and
+      Plug stores both as strings. So `put_session(res, :user_id, 1)` reads
+      back as `ctx.req.session["user_id"]`.
+    * `:resp_session_clear` — set only by `clear_session/1`. It wins over every
+      other `:resp_session` entry.
+
+  All cookie, header, and session helpers are safe to call from middleware.
 
   ## Halting
 
@@ -41,10 +48,10 @@ defmodule RpcElixir.Resolution do
   @typedoc "Pipeline execution state."
   @type state :: :continue | :halted
 
-  @typedoc "Cookie entry in resp_cookies, either a set or delete instruction."
+  @typedoc "Cookie entry in resp_cookies — either a set or delete instruction."
   @type resp_cookie_entry :: {String.t(), keyword()} | {:delete, keyword()}
 
-  @typedoc "Session entry in resp_session, either a value to set or `:delete`."
+  @typedoc "Session entry in resp_session — either a value to set or `:delete`."
   @type resp_session_entry :: term() | :delete
 
   @typedoc "Resolution envelope."
@@ -115,7 +122,7 @@ defmodule RpcElixir.Resolution do
   end
 
   @doc """
-  Stores application data under `key` in the context's `:assigns` map, the
+  Stores application data under `key` in the context's `:assigns` map — the
   primary way middleware passes request-scoped data to handlers.
   """
   @spec assign(t(), atom(), term()) :: t()
@@ -129,8 +136,6 @@ defmodule RpcElixir.Resolution do
   `opts` are forwarded directly to `Plug.Conn.put_resp_cookie/4` by the
   transport adapter. Supported options include `:http_only`, `:secure`,
   `:same_site`, `:max_age`, `:path`, `:domain`, `:sign`, `:encrypt`.
-
-  Safe to call from middleware.
   """
   @spec put_resp_cookie(t(), String.t(), String.t(), keyword()) :: t()
   def put_resp_cookie(%__MODULE__{resp_cookies: cookies} = res, name, value, opts \\ []) do
@@ -142,8 +147,6 @@ defmodule RpcElixir.Resolution do
 
   `opts` are forwarded to `Plug.Conn.delete_resp_cookie/3` by the transport
   adapter.
-
-  Safe to call from middleware.
   """
   @spec delete_resp_cookie(t(), String.t(), keyword()) :: t()
   def delete_resp_cookie(%__MODULE__{resp_cookies: cookies} = res, name, opts \\ []) do
@@ -153,8 +156,6 @@ defmodule RpcElixir.Resolution do
   @doc """
   Appends a response header. Duplicates are preserved (useful for headers like
   `set-cookie` that must be set separately per cookie).
-
-  Safe to call from middleware.
   """
   @spec put_resp_header(t(), String.t(), String.t()) :: t()
   def put_resp_header(%__MODULE__{resp_headers: headers} = res, name, value) do
@@ -166,8 +167,6 @@ defmodule RpcElixir.Resolution do
 
   Requires `Plug.Session` to be configured in the Plug pipeline. The transport
   adapter drains this into the session after dispatch.
-
-  Safe to call from middleware.
   """
   @spec put_session(t(), term(), term()) :: t()
   def put_session(%__MODULE__{resp_session: session} = res, key, value) do
@@ -176,8 +175,6 @@ defmodule RpcElixir.Resolution do
 
   @doc """
   Marks a session key for deletion on the response.
-
-  Safe to call from middleware.
   """
   @spec delete_session(t(), term()) :: t()
   def delete_session(%__MODULE__{resp_session: session} = res, key) do
@@ -187,10 +184,9 @@ defmodule RpcElixir.Resolution do
   @doc """
   Marks the entire session to be cleared on the response.
 
-  The transport adapter calls `Plug.Conn.clear_session/1` when it encounters
-  this sentinel. Any other `resp_session` entries are ignored after a clear.
-
-  Safe to call from middleware.
+  This sets the `:resp_session_clear` flag. The transport adapter then calls
+  `Plug.Conn.clear_session/1`. Any other `resp_session` entries are ignored
+  after a clear.
   """
   @spec clear_session(t()) :: t()
   def clear_session(%__MODULE__{} = res) do

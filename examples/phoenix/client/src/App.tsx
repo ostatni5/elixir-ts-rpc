@@ -16,7 +16,7 @@ type State =
   | { status: "ready"; session: Session }
   | { status: "error"; message: string };
 
-const fmt = (ms: EpochMillis | null) => (ms ? new Date(ms).toLocaleString() : "-");
+const fmt = (ms: EpochMillis | null) => (ms ? new Date(ms).toLocaleString() : "—");
 
 const loadSession = async (): Promise<Session> => {
   const [me, usersData, counter] = await Promise.all([
@@ -30,7 +30,7 @@ const loadSession = async (): Promise<Session> => {
 // RequireUser halts unauthenticated calls with a middleware error (source:
 // "middleware"). `loadSession` races several calls, so rather than guess which
 // one rejected first, `isMiddlewareError` recognizes the auth halt from any of
-// them by its provenance. The signal to send the user to Phoenix's login page.
+// them by its provenance — the signal to send the user to Phoenix's login page.
 const toErrorState = (e: unknown): State => {
   if (isMiddlewareError(e)) return { status: "anonymous" };
   if (isTransportError(e)) return { status: "error", message: e.message };
@@ -49,7 +49,7 @@ export default function App() {
 
   // A mutating RPC call: adjust the counter on the server and reflect the
   // authoritative new value the handler returns. A cross-cutting `unauthorized`
-  // is the central `onError` observer's concern (see rpc.ts), not this call's,
+  // is the central `onError` observer's concern (see rpc.ts), not this call's —
   // adjust handles only its own outcome.
   const adjust = async (delta: number) => {
     const { count } = await rpc.counter.adjust({ delta });
@@ -59,9 +59,9 @@ export default function App() {
   };
 
   // Two calls whose only purpose is to show up in the request log: `demo.slow`
-  // sits "pending" for ~5s before resolving. `demo.fail` always returns its
-  // `demo_failure` domain error, a call-site concern, so we handle (ignore) it
-  // here. We don't await either. The interceptor records both edges.
+  // sits "pending" for ~5s before resolving; `demo.fail` always returns its
+  // `demo_failure` domain error — a call-site concern, so we handle (ignore) it
+  // here. We don't await either; the interceptor records both edges.
   const runSlowCall = () => void rpc.demo.slow({});
   const runFailingCall = () => void rpc.demo.fail({}).catch(() => {});
 
@@ -70,7 +70,7 @@ export default function App() {
       <h1>elixir-ts-rpc · Phoenix example</h1>
       <p className="lede">
         Typed RPC on a Phoenix app that reuses Phoenix's generated auth and CSRF protection. This
-        SPA writes no auth code, it just reads the session Phoenix already established.
+        SPA writes no auth code — it just reads the session Phoenix already established.
       </p>
 
       {state.status === "loading" && <p>Loading…</p>}
@@ -86,7 +86,7 @@ export default function App() {
             <a className="btn" href={loginUrl}>
               Log in
             </a>{" "}
-            <a href={registerUrl}>or register</a> - these are Phoenix's generated pages. After
+            <a href={registerUrl}>or register</a> — these are Phoenix's generated pages. After
             logging in you'll return here and the RPC calls will succeed using the same session
             cookie.
           </p>
@@ -125,7 +125,7 @@ export default function App() {
               </button>
             </div>
             <span className="hint">
-              watch the log below, the slow call sits “pending”, the failing call flips to “error”
+              watch the log below — the slow call sits “pending”, the failing call flips to “error”
             </span>
           </div>
 

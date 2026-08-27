@@ -4,7 +4,7 @@ defmodule BasicServer.AuthPlug do
   `POST /auth/logout`.
 
   These live outside the RPC router because they need to mutate the session
-  cookie on the response, something the RPC handler contract does not allow
+  cookie on the response — something the RPC handler contract does not allow
   (handlers return values, they do not write headers/cookies).
 
   `auth.me` remains an RPC procedure: it only *reads* the session, so it fits

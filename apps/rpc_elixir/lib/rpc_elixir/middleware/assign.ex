@@ -2,8 +2,7 @@ defmodule RpcElixir.Middleware.Assign do
   @moduledoc """
   Built-in middleware that puts static values into `ctx.assigns`.
 
-  Useful for stamping a procedure with request-shape metadata (source channel,
-  feature flag overrides, fixture data in tests) without touching the handler.
+  Use it to stamp a procedure with fixed metadata. The handler stays unchanged.
 
   ## Usage
 
@@ -12,8 +11,7 @@ defmodule RpcElixir.Middleware.Assign do
           {RpcElixir.Middleware.Assign, source: :api, environment: :prod}
         ]
 
-  Each `{key, value}` pair in `opts` becomes an entry in `ctx.assigns`. Existing
-  assigns under the same key are overwritten.
+  Each `{key, value}` in `opts` becomes a `ctx.assigns` entry. Existing keys are overwritten.
   """
 
   @behaviour RpcElixir.Middleware

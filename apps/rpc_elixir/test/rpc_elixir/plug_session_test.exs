@@ -102,6 +102,7 @@ defmodule RpcElixir.PlugSessionTest do
   import Plug.Test
   import Plug.Conn
 
+  alias RpcElixir.JSON
   alias RpcElixir.PlugSessionTest.Pipeline
 
   @secret String.duplicate("a", 64)

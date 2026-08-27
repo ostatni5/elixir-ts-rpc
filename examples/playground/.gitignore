@@ -1,0 +1,14 @@
+# Mix
+/_build/
+/deps/
+
+# Cooked Popcorn bundle + bundled JS, both large and fully reproducible
+/dist/
+
+# Asset toolchain. package-lock.json is committed on purpose: build.sh runs
+# `npm ci` in CI, which requires it.
+/assets/node_modules/
+
+# Written by smoke.mjs when the deployed page fails to generate. CI uploads it
+# as an artifact instead.
+/assets/smoke-failure.png

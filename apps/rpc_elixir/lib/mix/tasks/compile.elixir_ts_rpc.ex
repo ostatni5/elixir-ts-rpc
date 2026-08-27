@@ -1,21 +1,14 @@
 defmodule Mix.Tasks.Compile.ElixirTsRpc do
   @moduledoc """
-  Mix compiler that regenerates the TypeScript client after Elixir recompiles.
+  Mix compiler that regenerates the TypeScript client on recompile.
 
-  Configure in your project's `config/config.exs`:
-
-      config :elixir_ts_rpc,
-        router: MyApp.Router,
-        out: Path.expand("../client/src/rpc.gen.ts", __DIR__)
-
-  And append to the compilers list in `mix.exs`:
-
-      compilers: Mix.compilers() ++ [:elixir_ts_rpc]
+  Config lives under `:elixir_ts_rpc`. It reads `:router` and `:out`. See
+  [Getting started](getting-started.md), step 5, for the setup.
 
   ## Build artifacts
 
-  The generated `.ts` file is tracked as a build artifact via `manifests/0`.
-  Running `mix clean` removes it along with the standard BEAM artifacts.
+  `manifests/0` tracks the generated `.ts` file as a build artifact.
+  `mix clean` removes it with the standard BEAM artifacts.
   """
 
   use Mix.Task.Compiler
@@ -54,7 +47,7 @@ defmodule Mix.Tasks.Compile.ElixirTsRpc do
 
   defp regenerate(router, out) do
     # Rely on the normal Elixir compiler to produce fresh BEAM files.
-    # Code.ensure_loaded/1 is sufficient, we do NOT manually purge or
+    # Code.ensure_loaded/1 is sufficient — we do NOT manually purge or
     # load_file here, which would race the parallel compiler and could purge
     # a module currently held by another process.
     case Code.ensure_loaded(router) do

@@ -2,7 +2,7 @@ defmodule PhoenixExampleWeb.RpcIntegrationTest do
   @moduledoc """
   Proves the RPC pipeline reuses Phoenix's authentication: the same
   `current_scope` that Phoenix's generated auth populates is what `RequireUser`
-  authorizes against, no RPC-specific auth code.
+  authorizes against — no RPC-specific auth code.
   """
 
   use PhoenixExampleWeb.ConnCase
@@ -22,7 +22,7 @@ defmodule PhoenixExampleWeb.RpcIntegrationTest do
 
   test "a state-changing call without a CSRF token is rejected by Phoenix's protect_from_forgery",
        %{conn: conn} do
-    # ConnCase's conn has CSRF skipped (set in Phoenix.ConnTest.build_conn). Flip
+    # ConnCase's conn has CSRF skipped (set in Phoenix.ConnTest.build_conn); flip
     # it back on to prove the :rpc pipeline's protect_from_forgery actually guards
     # RPC. A tokenless POST raises, which the endpoint turns into a 403.
     conn =

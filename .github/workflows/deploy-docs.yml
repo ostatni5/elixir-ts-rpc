@@ -8,6 +8,13 @@ on:
     branches: [main]
     paths:
       - "docs/**"
+      # Canonical text for the shared guide pages lives in the hex package and
+      # is pulled in via VitePress <!--@include:-->, so it must trigger a rebuild.
+      - "apps/rpc_elixir/docs/**"
+      # Twoslash type-checks the doc snippets against these packages' types, so a
+      # change to either can change (or break) the published output.
+      - "packages/client/**"
+      - "packages/react/**"
       - ".github/workflows/deploy-docs.yml"
   workflow_dispatch:
 
@@ -40,6 +47,16 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Twoslash type-checks the docs snippets against @elixir-ts-rpc/client and
+      # @elixir-ts-rpc/react, which resolve through their gitignored dist/. Without
+      # this the docs build fails on unresolved imports.
+      - name: Build workspace packages
+        run: |
+          npm run build --workspace @elixir-ts-rpc/client
+          npm run build --workspace @elixir-ts-rpc/react
+
+      # Fails on any snippet that no longer type-checks, and (via the chained
+      # check-no-local-paths script) on any local path in the built output.
       - name: Build with VitePress
         run: npm run docs:build --workspace @elixir-ts-rpc/docs
 

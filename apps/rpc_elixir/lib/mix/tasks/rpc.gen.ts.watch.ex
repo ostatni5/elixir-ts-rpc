@@ -1,31 +1,33 @@
 defmodule Mix.Tasks.Rpc.Gen.Ts.Watch do
   @moduledoc """
-  Watches Elixir sources and regenerates the TypeScript client on every change.
+  Watches Elixir sources and regenerates the TypeScript client on change.
 
-  Runs `rpc.gen.ts` once on startup, then re-runs it whenever a `.ex` file
-  under the watched directories changes.
+  Runs `rpc.gen.ts` once on startup. Then re-runs it when a `.ex` file under a
+  watched directory changes. Each run spawns a fresh `mix rpc.gen.ts` process.
 
-  Each regeneration spawns a fresh `mix rpc.gen.ts` process. This is
-  deliberate: an in-process `Mix.Task.rerun("compile")` does not pick up source
-  edits. The Elixir compiler caches its manifest for the lifetime of the BEAM,
-  so it reports `:noop` and the generated client goes stale. A separate process
-  re-reads the manifest from disk and recompiles correctly.
+  The fresh process is deliberate. An in-process `Mix.Task.rerun("compile")`
+  misses source edits. The Elixir compiler caches its manifest for the lifetime
+  of the BEAM. It reports `:noop`, and the generated client goes stale. A
+  separate process re-reads the manifest from disk and recompiles correctly.
 
   ## Usage
 
       mix rpc.gen.ts.watch --router MyApp.Router --out path/to/rpc.gen.ts
 
-  Accepts every option `rpc.gen.ts` accepts, plus:
-
-    * `--dir` - a directory to watch (repeatable; defaults to `lib`)
+  Accepts every option `rpc.gen.ts` accepts, plus `--dir`: a directory to
+  watch. Repeatable, defaults to `lib`.
 
   Requires the optional `:file_system` dependency:
 
       {:file_system, "~> 1.0", only: :dev}
-
   """
 
   use Mix.Task
+
+  # `:file_system` is optional, so a consumer who never runs watch mode compiles
+  # this module without it. `ensure_file_system!/0` is the real guard. This only
+  # keeps the absent module from warning on every consumer compile.
+  @compile {:no_warn_undefined, FileSystem}
 
   @shortdoc "Watch Elixir sources and regenerate the TypeScript client on change"
 
@@ -64,7 +66,7 @@ defmodule Mix.Tasks.Rpc.Gen.Ts.Watch do
     end
   end
 
-  # Wait for a quiet window before regenerating, editors emit several events
+  # Wait for a quiet window before regenerating — editors emit several events
   # per save, and a single keystroke can touch many files.
   defp drain_events do
     receive do

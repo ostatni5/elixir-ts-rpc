@@ -258,7 +258,7 @@ defmodule PhoenixExampleWeb.UserAuth do
 
   @doc "Returns the path to redirect to after log in."
   # A *fresh* login (conn has no current_scope yet) falls through to "/", which
-  # serves the React SPA, so the demo flow is login (Phoenix page) -> SPA, with
+  # serves the React SPA — so the demo flow is login (Phoenix page) -> SPA, with
   # no change to the generated auth needed. An already-logged-in user visiting
   # the login page is sent to settings.
   def signed_in_path(%Plug.Conn{assigns: %{current_scope: %Scope{user: %Accounts.User{}}}}) do

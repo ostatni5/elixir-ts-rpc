@@ -1,0 +1,131 @@
+name: Deploy playground
+
+# The playground is built here rather than on Netlify: Popcorn string-compares
+# OTP and Elixir versions and demands exactly 26.0.2 / 1.17.3, which Netlify's
+# image would have to compile from source. setup-beam has prebuilt binaries, so
+# the cook happens here and Netlify only hosts the result.
+on:
+  push:
+    branches: [main, pre-0.0.2]
+    paths:
+      - "examples/playground/**"
+      - "apps/rpc_elixir/**"
+      - ".github/workflows/deploy-playground.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: playground-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Build and deploy
+    runs-on: ubuntu-latest
+    # Pinned exactly: 17.38.1 needs node >=18.14.0, while current majors need
+    # >=22.13.0 and would not run on the Node pinned above.
+    env:
+      NETLIFY_CLI: netlify-cli@17.38.1
+    # Skip cleanly on forks, where the Netlify secrets are not available.
+    if: ${{ github.repository == 'ostatni5/elixir-ts-rpc' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Checked before the build, not at the deploy step: reaching that one and
+      # failing there costs a full Popcorn cook first.
+      - name: Check the Netlify credentials are present
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+        run: |
+          : "${NETLIFY_AUTH_TOKEN:?is not set. Add it under Settings -> Secrets -> Actions}"
+          : "${NETLIFY_SITE_ID:?is not set. Add it under Settings -> Secrets -> Actions}"
+
+      # Pinned to match examples/playground/.tool-versions, which Popcorn requires
+      # exactly and which differs from the repo root on purpose.
+      - name: Set up Erlang/Elixir
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: "26.0.2"
+          elixir-version: "1.17.3-otp-26"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.0.0"
+
+      - name: Cache mix deps
+        uses: actions/cache@v4
+        with:
+          path: |
+            examples/playground/deps
+            examples/playground/_build
+          key: ${{ runner.os }}-playground-${{ hashFiles('examples/playground/mix.lock') }}
+          restore-keys: ${{ runner.os }}-playground-
+
+      - name: Build
+        run: ./build.sh --production
+        working-directory: examples/playground
+
+      # Cheap structural checks only: that the cook produced every artifact the
+      # page fetches, and that codegen actually made it into the bundle. Whether
+      # codegen *runs* is not knowable from here, see the smoke test below.
+      - name: Sanity-check the bundle
+        working-directory: examples/playground
+        run: |
+          test -f dist/index.html
+          test -f dist/wasm/bundle.avm
+          test -f dist/ts.worker.js
+          grep -qa "Elixir.RpcElixir.Codegen" dist/wasm/bundle.avm
+
+      # Draft first. Without COOP/COEP the browser withholds SharedArrayBuffer and
+      # the playground cannot boot at all, so the headers are asserted on a draft
+      # URL before anything is promoted.
+      - name: Deploy draft
+        id: draft
+        working-directory: examples/playground
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+        run: |
+          url=$(npx --yes "$NETLIFY_CLI" deploy --dir=dist --json \
+            --message "draft ${{ github.sha }}" | jq -er .deploy_url)
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+
+      # netlify.toml resolves ahead of the repo root only because the root has no
+      # netlify.toml of its own; one added there would silently win and strip
+      # these headers. Assert rather than trust the resolution order.
+      - name: Assert the draft is cross-origin isolated
+        run: |
+          url='${{ steps.draft.outputs.url }}'
+          headers=$(curl -sSfI --retry 3 --retry-delay 2 --retry-all-errors "$url/")
+          printf '%s\n' "$headers"
+          grep -qi '^cross-origin-opener-policy: *same-origin' <<<"$headers"
+          grep -qi '^cross-origin-embedder-policy: *require-corp' <<<"$headers"
+          grep -qi '^cross-origin-resource-policy: *same-origin' <<<"$headers"
+          curl -sSf -o /dev/null "$url/wasm/bundle.avm"
+
+      # The checks above cannot see a codegen path that AtomVM refuses at runtime.
+      # `:re` and `ets:select` are absent there, and reintroducing either one
+      # still cooks a valid .avm that still contains RpcElixir.Codegen, so every
+      # grep above stays green and only a browser notices. Verified by reverting
+      # the two AtomVM patches: the bundle checks passed, this step did not.
+      - name: Smoke-test the draft in a browser
+        working-directory: examples/playground/assets
+        run: |
+          npx playwright install --with-deps chromium
+          node smoke.mjs '${{ steps.draft.outputs.url }}'
+
+      - name: Upload the smoke-test screenshot
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playground-smoke-failure
+          path: examples/playground/assets/smoke-failure.png
+          if-no-files-found: ignore
+
+      - name: Promote to production
+        working-directory: examples/playground
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+        run: npx --yes "$NETLIFY_CLI" deploy --prod --dir=dist --message "${{ github.sha }}"

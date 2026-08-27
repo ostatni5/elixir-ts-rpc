@@ -1,7 +1,7 @@
 // A small external store of RPC request lifecycle entries, fed by the
 // `logRequests` interceptor in `rpc.ts` and rendered by the request-log panel in
 // App.tsx. Each call adds a "pending" entry on start and flips it to "ok"/"error"
-// (with a duration) on finish, a concrete demonstration of what an interceptor
+// (with a duration) on finish — a concrete demonstration of what an interceptor
 // can observe that the fire-and-forget `onError` hook cannot.
 export type RequestStatus = "pending" | "ok" | "error";
 

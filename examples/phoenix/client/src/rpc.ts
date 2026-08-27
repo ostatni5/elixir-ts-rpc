@@ -5,7 +5,7 @@ import { createRpcClient } from "./rpc.gen";
 
 // Records each call's lifecycle into the request log: a "pending" entry when it
 // starts, flipped to "ok"/"error" with a duration when it finishes. Because an
-// interceptor wraps `next` and is awaited, it sees both edges of the call,
+// interceptor wraps `next` and is awaited, it sees both edges of the call —
 // something the fire-and-forget `onError` observer can't do.
 const logRequests: RpcInterceptor = async (req, next) => {
   const id = requestLog.start(req.procedure);
@@ -21,7 +21,7 @@ const logRequests: RpcInterceptor = async (req, next) => {
 };
 
 // Send the CSRF token on every RPC call so Phoenix's `protect_from_forgery`
-// accepts our POSTs, the RPC library adds no CSRF mechanism of its own.
+// accepts our POSTs — the RPC library adds no CSRF mechanism of its own.
 export const rpc = createRpcClient({
   baseUrl: "/rpc",
   credentials: "same-origin",

@@ -5,18 +5,23 @@ defmodule RpcElixir.Codegen.SourceLinks do
 
   import RpcElixir.Codegen.Shared, only: [sanitize_doc: 1]
 
+  # A host whose handlers were never compiled to disk has no BEAM to read a line
+  # number out of. It puts a `{:ok, display, href}`-returning fun here instead, and
+  # the emitted comment keeps the shape it has for a real project.
+  @resolver_key :__rpc_source_resolver__
+
   def handler_jsdoc(proc, indent) do
     doc_text =
       if proc[:doc] && proc[:doc] != "", do: sanitize_doc(String.trim(proc[:doc])), else: nil
 
     link_comment =
-      with {:ok, source_file} <- handler_source_file(proc.handler_mod),
-           {:ok, line} <- handler_function_line(proc.handler_mod, proc.handler_fun, 2) do
-        display = "#{Path.basename(source_file)}:#{line}"
-        mfa = "#{inspect(proc.handler_mod)}.#{proc.handler_fun}/2"
-        "[#{display}](#{source_file}#L#{line}) - `#{mfa}`"
-      else
-        _ -> nil
+      case handler_location(proc) do
+        {:ok, display, href} ->
+          mfa = "#{inspect(proc.handler_mod)}.#{proc.handler_fun}/2"
+          "[#{display}](#{href}) — `#{mfa}`"
+
+        :error ->
+          nil
       end
 
     case {doc_text, link_comment} do
@@ -36,6 +41,22 @@ defmodule RpcElixir.Codegen.SourceLinks do
           |> Enum.map_join("\n", &"#{indent} * #{&1}")
 
         "#{indent}/**\n#{doc_lines}\n#{indent} *\n#{indent} * #{link}\n#{indent} */\n"
+    end
+  end
+
+  defp handler_location(proc) do
+    case Process.get(@resolver_key) do
+      nil -> beam_location(proc)
+      resolver -> resolver.(proc.handler_mod, proc.handler_fun)
+    end
+  end
+
+  defp beam_location(proc) do
+    with {:ok, source_file} <- handler_source_file(proc.handler_mod),
+         {:ok, line} <- handler_function_line(proc.handler_mod, proc.handler_fun, 2) do
+      {:ok, "#{Path.basename(source_file)}:#{line}", "#{source_file}#L#{line}"}
+    else
+      _ -> :error
     end
   end
 

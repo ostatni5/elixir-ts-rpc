@@ -243,3 +243,17 @@ defmodule RpcElixir.CodegenFixtures.CodeWithDetailsHandlers do
           | {:error, %{code: :rate_limited | :quota_exceeded, retry_after: integer()}}
   def call(_input, _ctx), do: {:ok, %{}}
 end
+
+# Lives in test/support (compiled to a .beam on disk) rather than inline in a
+# test file, so a test can purge it and prove codegen loads it back. An inline
+# module has no .beam to reload from.
+defmodule RpcElixir.CodegenFixtures.PurgeableMiddleware do
+  @moduledoc false
+  @behaviour RpcElixir.Middleware
+
+  @impl true
+  def call(res, _opts), do: res
+
+  @impl true
+  def rpc_error_codes(_opts), do: [:unauthorized]
+end

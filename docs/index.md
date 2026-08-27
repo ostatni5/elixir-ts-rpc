@@ -5,65 +5,101 @@ hero:
   name: elixir-ts-rpc
   text: Typed RPC, Elixir ↔ TypeScript
   tagline: >-
-    Define procedures in Elixir with ordinary @spec typespecs and a small router
-    DSL. The fully typed TypeScript client is generated from them. No separate
-    schema language, no hand-written TypeScript.
+    Your Elixir functions callable from TypeScript. The function is the contract.
   actions:
     - theme: brand
       text: Get started
       link: /guide/getting-started
     - theme: alt
-      text: How it works
-      link: /guide/how-it-works
-    - theme: alt
-      text: View on GitHub
-      link: https://github.com/ostatni5/elixir-ts-rpc
+      text: Try the playground
+      link: https://elixir-ts-rpc-playground.netlify.app
 
 features:
   - icon: 🧬
-    title: Types from your typespecs
-    details: Input, output, and error types are read straight from your Elixir typespecs. No separate schema language, no TypeScript types to keep in sync.
-  - icon: 🔌
-    title: HTTP transport included
-    details: A Plug pipeline validates input, runs your handler, validates output, and serializes, all with request-scoped middleware.
+    title: No schema, anywhere
+    details: No GraphQL SDL, no OpenAPI document, no Zod mirror. There is a function, and the compiler already knows its shape.
   - icon: 🛟
     title: Typed errors end-to-end
-    details: Your Elixir error unions become typed, catchable errors in TypeScript. The failure path stays as typed as the happy path.
+    details: Elixir error unions become typed, catchable errors in TypeScript.
+  - icon: 🔗
+    title: Click through to the handler
+    details: Every generated method links to the Elixir line that produced it. Hover the call, follow the link, land on the handler.
+  - icon: 🔥
+    title: Fits your Phoenix app
+    details: Mount one plug in your existing endpoint. Keep mix phx.gen.auth, CSRF, and your session exactly as they are.
   - icon: ⚙️
     title: Codegen that fits your loop
-    details: Regenerate the client on every compile, on file change, or on demand in CI. The client never drifts from your types.
-  - icon: 🏷️
-    title: Custom & branded wire types
-    details: Control how values cross the wire. Send branded strings and numbers, epoch-millis datetimes, and your own custom types.
+    details: Regenerate on every compile, on file change, or on demand in CI.
   - icon: 🧪
     title: Real, full-stack examples
-    details: A React SPA on a Plug backend, and the same typed RPC on a stock Phoenix app reusing its auth and CSRF.
+    details: A React SPA on Plug. The same on a stock Phoenix app, with auth and CSRF.
 ---
 
-<div style="max-width: 960px; margin: 4rem auto 0; padding: 0 24px;">
+<script setup>
+import { withBase } from "vitepress";
+</script>
 
-> **Status: early release (`0.0.1`), pre-1.0.** APIs may change before 1.0. The
-> HTTP Plug transport and TypeScript codegen are working and tested end-to-end.
-> Realtime transports and framework adapters are not built yet.
+<div style="max-width: 1152px; margin: 4rem auto 0; padding: 0 24px;">
 
-## In one glance
+## See it run
 
-Write a handler with a classic `@spec`:
+<div>
+<video
+  controls
+  playsinline
+  preload="none"
+  width="1440"
+  height="760"
+  :poster="withBase('/playground-tour.jpg')"
+  :src="withBase('/playground-tour.mp4')"
+  style="display: block; width: 100%; height: auto; border-radius: 8px; border: 1px solid var(--vp-c-divider);"
+></video>
+</div>
+
+</div>
+
+<div style="max-width: 960px; margin: 1.25rem auto 0; padding: 0 24px;">
+
+A guided tour of the [playground](https://elixir-ts-rpc-playground.netlify.app).
+Edit a `@spec`, watch the client regenerate, follow a method back to the handler
+that produced it, then rename a field and watch the TypeScript break. That is
+the real codegen running in the browser, compiled to WebAssembly.
+[Try it yourself →](https://elixir-ts-rpc-playground.netlify.app)
+
+## How it looks
+
+A procedure is an ordinary function. Its `@spec` is how you tell the compiler
+its shape today:
 
 ```elixir
-@spec get_user(%{id: integer()}, RpcElixir.Context.t()) ::
-        {:ok, %{id: integer(), name: String.t()}} | {:error, :not_found}
-def get_user(%{id: id}, _ctx), do: ...
+defmodule MyApp.Users do
+  use RpcElixir.Handler
+
+  @spec get(%{id: String.t()}, RpcElixir.Context.t()) ::
+          {:ok, %{id: String.t(), email: String.t()}} | {:error, :not_found}
+  def get(%{id: id}, _ctx), do: ...
+end
 ```
 
-Run `mix rpc.gen.ts`, and call it from the browser with full inference and typed
-errors:
+Expose the module on a router:
 
-```ts
-const user = await client.users.get({ id: 1 });
-//    ^? { id: number; name: string }
+```elixir
+scope "users" do
+  expose MyApp.Users   # → "users.get", "users.list", …
+end
 ```
 
-That's the whole idea. Your Elixir typespecs *are* the contract.
+Run `mix rpc.gen.ts`, then call it from the browser:
+
+```ts twoslash
+import { createRpcClient } from "./rpc.gen";
+const client = createRpcClient({ baseUrl: "/rpc" });
+// ---cut---
+const user = await client.users.get({ id: "u_1" });
+const email = user.email;
+//    ^?
+```
+
+[Get started →](/guide/getting-started)
 
 </div>

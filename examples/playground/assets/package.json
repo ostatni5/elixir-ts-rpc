@@ -1,0 +1,15 @@
+{
+  "name": "popcorn-test",
+  "private": true,
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "dependencies": {
+    "@swmansion/popcorn": "^0.3.3",
+    "monaco-editor": "^0.56.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "playwright": "^1.62.1"
+  }
+}

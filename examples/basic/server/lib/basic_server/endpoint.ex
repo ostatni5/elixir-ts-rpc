@@ -5,7 +5,7 @@ defmodule BasicServer.Endpoint do
 
   plug Plug.Logger
 
-  # Salts are not secret, they are combined with secret_key_base via HKDF.
+  # Salts are not secret — they are combined with secret_key_base via HKDF.
   # Only SECRET_KEY_BASE needs to be rotated for production deployments.
   plug Plug.Session,
     store: :cookie,

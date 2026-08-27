@@ -3,7 +3,7 @@ defmodule BasicServer.Middleware.RequireUser do
   Loads the current user from the session and assigns it to `ctx.assigns`.
 
   Halts with `:unauthorized` if no session, no `:user_id`, or the user lookup
-  fails. App-level middleware - apps own their auth policy (session shape,
+  fails. App-level middleware — apps own their auth policy (session shape,
   user store, error semantics).
   """
 

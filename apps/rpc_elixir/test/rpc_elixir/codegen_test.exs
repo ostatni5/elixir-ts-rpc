@@ -156,10 +156,19 @@ defmodule RpcElixir.CodegenTest.MiddlewareErrorRouter do
   alias RpcElixir.CodegenTest.AuthMiddleware
   alias RpcElixir.ManifestFixtures.Handlers
 
-  # list_users has no declared error (→ `never`). get_user already declares
+  # list_users has no declared error (→ `never`); get_user already declares
   # `unauthorized` in its @spec, so the middleware code must de-dup, not double.
   procedure "users.list", &Handlers.list_users/2, middleware: [AuthMiddleware]
   procedure "users.get", &Handlers.get_user/2, middleware: [AuthMiddleware]
+end
+
+defmodule RpcElixir.CodegenTest.PurgeableMiddlewareRouter do
+  @moduledoc false
+  use RpcElixir.Router
+  alias RpcElixir.CodegenFixtures.PurgeableMiddleware
+  alias RpcElixir.ManifestFixtures.Handlers
+
+  procedure "users.list", &Handlers.list_users/2, middleware: [PurgeableMiddleware]
 end
 
 defmodule RpcElixir.CodegenTest.NoCodesMiddlewareRouter do
@@ -171,7 +180,7 @@ defmodule RpcElixir.CodegenTest.NoCodesMiddlewareRouter do
   procedure "users.list", &Handlers.list_users/2, middleware: [NoCodesMiddleware]
 end
 
-# Router using a custom type that exposes ts_type/0 - exercises branded custom types.
+# Router using a custom type that exposes ts_type/0 — exercises branded custom types.
 defmodule RpcElixir.CodegenTest.BrandedCustomRouter do
   @moduledoc false
   use RpcElixir.Router
@@ -397,7 +406,7 @@ defmodule RpcElixir.CodegenTest do
       assert source =~ "export type RpcClient = {"
       # branch for the "users" namespace
       assert source =~ "users: {"
-      # leaf methods inside the branch - typed RpcMethod (callable + isError guard)
+      # leaf methods inside the branch — typed RpcMethod (callable + isError guard)
       assert source =~
                "get: RpcMethod<ManifestFixturesGetUserInput, ManifestFixturesGetUserOutput, ManifestFixturesGetUserError>;"
 
@@ -519,9 +528,26 @@ defmodule RpcElixir.CodegenTest do
     test "de-dups a middleware code already declared in the handler @spec" do
       source = Codegen.generate(RpcElixir.CodegenTest.MiddlewareErrorRouter)
 
-      # get_user's @spec already has `unauthorized`. The runtime codes must not repeat it.
+      # get_user's @spec already has `unauthorized`; the runtime codes must not repeat it.
       assert source =~ ~s("users.get", ["not_found", "unauthorized"])
       refute source =~ ~s(["not_found", "unauthorized", "unauthorized"])
+    end
+
+    test "picks up codes from a middleware module that is not loaded yet" do
+      # Regression: codegen asked `function_exported?/3` without loading first, so
+      # a middleware nothing had touched reported no exports and its codes were
+      # silently dropped. Whether they appeared depended on load order, which made
+      # the generated client nondeterministic. The other tests in this block cannot
+      # catch it: their middleware is defined in this file and so always loaded.
+      mod = RpcElixir.CodegenFixtures.PurgeableMiddleware
+      :code.purge(mod)
+      true = :code.delete(mod)
+      refute :erlang.module_loaded(mod)
+
+      source = Codegen.generate(RpcElixir.CodegenTest.PurgeableMiddlewareRouter)
+
+      assert source =~ ~s(MiddlewareError<"unauthorized">)
+      assert source =~ ~s("users.list", ["unauthorized"])
     end
 
     test "middleware without rpc_error_codes/1 contributes nothing (backward compatible)" do
@@ -766,7 +792,7 @@ defmodule RpcElixir.CodegenTest do
       assert source =~ ~r/children: TreeNode\[\]/
       # The label field should be a plain string.
       assert source =~ ~r/label: string/
-      # No infinite loop occurred - generate/2 returned.
+      # No infinite loop occurred — generate/2 returned.
     end
 
     test "mutually-recursive structs emit two interfaces that cross-reference each other" do
@@ -779,7 +805,7 @@ defmodule RpcElixir.CodegenTest do
       assert source =~ ~r/prev: GraphNodeA \| null/
     end
 
-    test "recursive generate/2 does not hang - returns in finite time" do
+    test "recursive generate/2 does not hang — returns in finite time" do
       # If the walker were still infinite-looping, this would time-out rather than
       # reaching the assertion. The test itself is the liveness proof.
       assert is_binary(Codegen.generate(RpcElixir.CodegenTest.RecursiveTreeRouter))
@@ -873,5 +899,27 @@ defmodule RpcElixir.CodegenWireAliasTest do
 
     assert source =~ ~s(export type Sku = string & { readonly __brand: "Sku" };)
     assert source =~ ~r/when: Sku/
+  end
+
+  describe "handler source links" do
+    test "a host-installed resolver replaces the BEAM lookup" do
+      Process.put(:__rpc_source_resolver__, fn mod, fun ->
+        {:ok, "buffer.ex:#{byte_size(Atom.to_string(fun))}", "inmemory://#{inspect(mod)}"}
+      end)
+
+      on_exit(fn -> Process.delete(:__rpc_source_resolver__) end)
+      source = Codegen.generate(Router)
+
+      assert source =~ "[buffer.ex:8](inmemory://RpcElixir.ManifestFixtures.Handlers)"
+      refute source =~ "#L"
+    end
+
+    test "a resolver that cannot place a handler emits no link" do
+      Process.put(:__rpc_source_resolver__, fn _mod, _fun -> :error end)
+      on_exit(fn -> Process.delete(:__rpc_source_resolver__) end)
+      source = Codegen.generate(Router)
+
+      refute source =~ "]("
+    end
   end
 end

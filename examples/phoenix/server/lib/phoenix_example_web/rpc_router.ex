@@ -2,10 +2,13 @@ defmodule PhoenixExampleWeb.RpcRouter do
   @moduledoc """
   RPC router for the Phoenix example.
 
+  Each handler module is exposed whole, so its public `@spec`'d functions are the
+  API surface and the router stays one line per handler.
+
   Every procedure lives inside a `RequireUser` scope, so authentication is a
   structural property of the router rather than a flag repeated per procedure.
   `RequireUser` authenticates against the `current_scope` that Phoenix's own auth
-  populated, the RPC layer writes no auth code of its own.
+  populated — the RPC layer writes no auth code of its own.
 
   `DateTime` values serialize as epoch milliseconds on the wire (via the
   `RpcElixir.UnixMillis` alias), so `confirmed_at`/`inserted_at` arrive in the
@@ -18,11 +21,12 @@ defmodule PhoenixExampleWeb.RpcRouter do
   alias PhoenixExampleWeb.Rpc.Middleware.RequireUser
 
   scope middleware: [RequireUser] do
-    procedure "auth.me", &Auth.me/2
+    scope "auth" do
+      expose Auth
+    end
 
     scope "users" do
-      procedure "list", &Users.list/2
-      procedure "get", &Users.get/2
+      expose Users
     end
 
     scope "counter" do

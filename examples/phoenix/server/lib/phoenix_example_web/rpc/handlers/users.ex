@@ -1,6 +1,6 @@
 defmodule PhoenixExampleWeb.Rpc.Handlers.Users do
   @moduledoc """
-  User procedures backed by the real `Accounts` context and database - the same
+  User procedures backed by the real `Accounts` context and database — the same
   data Phoenix's auth, registration, and settings pages operate on.
   """
 

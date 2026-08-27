@@ -10,7 +10,7 @@ const label: Record<RequestStatus, string> = {
   error: "✕ error",
 };
 
-// Renders the lifecycle entries the `logRequests` interceptor records. Each RPC
+// Renders the lifecycle entries the `logRequests` interceptor records — each RPC
 // appears the moment it starts (pending) and updates in place when it finishes.
 export function RequestLog() {
   const entries = useSyncExternalStore(requestLog.subscribe, requestLog.getSnapshot);

@@ -1,4 +1,4 @@
-// Exported for direct testing. The runtime path is selected by `combine`
+// Exported for direct testing — the runtime path is selected by `combine`
 // below, which prefers native `AbortSignal.any` when available.
 export function combineSignalsPolyfill(signals: AbortSignal[]): AbortSignal {
   const controller = new AbortController();

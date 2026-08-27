@@ -6,12 +6,13 @@ defmodule RpcElixir.Codegen.Render do
 
   import RpcElixir.Codegen.Shared
 
+  alias RpcElixir.JSON
   alias RpcElixir.Types.Builtins
 
   @builtin_brand_by_kind Map.new(Builtins.all(), fn b -> {b.kind, b.ts_brand} end)
 
   # ---------------------------------------------------------------------------
-  # Name map, mirrors naming.ts logic
+  # Name map — mirrors naming.ts logic
   # ---------------------------------------------------------------------------
 
   def build_def_keys(procedures) do
@@ -51,7 +52,7 @@ defmodule RpcElixir.Codegen.Render do
       end)
 
     if collisions != [] do
-      raise "Codegen: cannot resolve unique TypeScript names for these handlers, rename one of the modules to disambiguate:\n  #{Enum.join(collisions, "\n  ")}"
+      raise "Codegen: cannot resolve unique TypeScript names for these handlers — rename one of the modules to disambiguate:\n  #{Enum.join(collisions, "\n  ")}"
     end
   end
 
@@ -147,10 +148,10 @@ defmodule RpcElixir.Codegen.Render do
 
   # Fail loudly: a new/misspelled IR kind reaching here would otherwise emit the
   # valid-but-meaningless TS `unknown`, which compiles and slips past the tsc
-  # round-trip, shipping broken types silently.
+  # round-trip — shipping broken types silently.
   def render_type(other, _resolve) do
     raise ArgumentError,
-          "rpc_elixir codegen: unhandled IR kind #{inspect(kind_of(other))} in ir_to_ts_type/3, this is a bug in the type pipeline"
+          "rpc_elixir codegen: unhandled IR kind #{inspect(kind_of(other))} in ir_to_ts_type/3 — this is a bug in the type pipeline"
   end
 
   defp render_object(%{kind: "object", struct: mod, fields: fields}, resolve) when is_atom(mod) do
@@ -328,8 +329,8 @@ defmodule RpcElixir.Codegen.Render do
   end
 
   @doc """
-  Returns the raw code values for a procedure's error IR (an enum error's values,
-  or an object error's `:code` enum values), or `[]` when the error has no
+  Returns the raw code values for a procedure's error IR — an enum error's values,
+  or an object error's `:code` enum values — or `[]` when the error has no
   discriminable code set. The generated client passes these to `rpcMethod` so
   `.isError` can soundly narrow to the procedure's error type at runtime.
   """
@@ -343,9 +344,9 @@ defmodule RpcElixir.Codegen.Render do
     end
   end
 
-  # The runtime `isError` guard only checks `code`. It never validates `details`
+  # The runtime `isError` guard only checks `code`; it never validates `details`
   # (it's `payload.details as Details`). So the generated type must not promise the
-  # detail object is always present, it widens to `| undefined`.
+  # detail object is always present — it widens to `| undefined`.
   defp details_ts_type(fields, _name_map, _struct_types) when fields == %{}, do: "undefined"
 
   defp details_ts_type(fields, name_map, struct_types) do

@@ -1,0 +1,4 @@
+# Popcorn 0.3.3 does an exact string comparison in its mix.exs and refuses to
+# build on anything else. This is not a range. Node is inherited from the repo root.
+erlang 26.0.2
+elixir 1.17.3-otp-26

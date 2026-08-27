@@ -6,9 +6,9 @@ defmodule RpcElixir.Types.Walker do
   defmodule Ctx do
     @moduledoc false
     # Threaded through every `walk/2` call instead of the process dictionary:
-    #   * local_types  - the current module's `@type` definitions, for resolving local type calls
-    #   * wire_aliases - `%{source_module => target_custom_type}` overrides for `.t()` resolution
-    #   * resolving    - per-resolution-path stack of modules, for recursive-type cycle detection
+    #   * local_types  — the current module's `@type` definitions, for resolving local type calls
+    #   * wire_aliases — `%{source_module => target_custom_type}` overrides for `.t()` resolution
+    #   * resolving    — per-resolution-path stack of modules, for recursive-type cycle detection
     #
     # `resolving` rides the call stack: each frame pushes onto its own immutable copy
     # before descending, so the "pop" on return is free and sibling branches of a
@@ -25,7 +25,7 @@ defmodule RpcElixir.Types.Walker do
     resolve_t_call(Module.concat(segments), ctx)
   end
 
-  # matches: <atom-module>.t(), when the alias has already been resolved to an atom
+  # matches: <atom-module>.t() — when the alias has already been resolved to an atom
   def walk({{:., _, [module, :t]}, _, []}, ctx) when is_atom(module) do
     resolve_t_call(module, ctx)
   end
@@ -46,13 +46,13 @@ defmodule RpcElixir.Types.Walker do
 
   def walk({t, _, []}, _ctx) when t in [:any, :term] do
     raise ArgumentError,
-          "#{t}() is not allowed in RPC specs, every field must have an explicit type. " <>
+          "#{t}() is not allowed in RPC specs — every field must have an explicit type. " <>
             "Replace with a concrete type, a struct with `@type t`, or a custom type module."
   end
 
   def walk({:map, _, []}, _ctx) do
     raise ArgumentError,
-          "map() is not allowed in RPC specs, use an explicit map shape like " <>
+          "map() is not allowed in RPC specs — use an explicit map shape like " <>
             "`%{key: String.t(), count: integer()}` instead."
   end
 
@@ -80,7 +80,7 @@ defmodule RpcElixir.Types.Walker do
     %{kind: "enum", values: [Atom.to_string(atom)]}
   end
 
-  # matches: name(args), local @type call (e.g. `my_type(integer())`)
+  # matches: name(args) — local @type call (e.g. `my_type(integer())`)
   def walk({name, _, args}, ctx) when is_atom(name) and is_list(args) do
     arity = length(args)
 
@@ -91,7 +91,7 @@ defmodule RpcElixir.Types.Walker do
 
       nil ->
         raise ArgumentError,
-              "unsupported typespec form: #{name}/#{arity}, local @type not found " <>
+              "unsupported typespec form: #{name}/#{arity} — local @type not found " <>
                 "(define `@type #{name}#{type_arity_hint(arity)} :: ...` in this module)"
     end
   end
@@ -117,7 +117,7 @@ defmodule RpcElixir.Types.Walker do
 
   defp substitute_until_fixed(_ast, _subs, 0) do
     raise ArgumentError,
-          "substitute_vars exceeded 16 iterations, circular type variable bindings detected"
+          "substitute_vars exceeded 16 iterations — circular type variable bindings detected"
   end
 
   defp substitute_until_fixed(ast, subs, remaining) do
@@ -161,11 +161,11 @@ defmodule RpcElixir.Types.Walker do
       true ->
         raise ArgumentError,
               "unsupported union in @spec: #{Macro.to_string(union)} " <>
-                "(only `T | nil` and atom literal unions are supported, use `@rpc` override for other forms)"
+                "(only `T | nil` and atom literal unions are supported — use `@rpc` override for other forms)"
     end
   end
 
-  # %SomeStruct{} with no inline overrides is equivalent to SomeStruct.t(), delegate to type resolution.
+  # %SomeStruct{} with no inline overrides is equivalent to SomeStruct.t() — delegate to type resolution.
   defp resolve_struct(module, [], ctx), do: resolve_t_call(module, ctx)
 
   defp resolve_struct(module, pairs, ctx) do
@@ -207,7 +207,7 @@ defmodule RpcElixir.Types.Walker do
   end
 
   # Recursive struct types (self-referential like `Tree`, or mutually-recursive
-  # A.t() ↔ B.t()) are supported by returning a *reference* at the cycle point,
+  # A.t() ↔ B.t()) are supported by returning a *reference* at the cycle point —
   # a truncated struct marker with empty fields. The full field set comes from the
   # first (outermost) occurrence of the struct in the IR tree. Codegen emits that as
   # a named `export interface` and renders every reference (full or truncated) as the
@@ -224,10 +224,10 @@ defmodule RpcElixir.Types.Walker do
 
       module in ctx.resolving ->
         raise ArgumentError,
-              "cannot resolve #{inspect(module)}.t(), recursive type detected " <>
+              "cannot resolve #{inspect(module)}.t() — recursive type detected " <>
                 "(a type that refers back to itself, directly or via another module). " <>
-                "Recursive types are not supported in RPC specs, " <>
-                "only struct-based recursive types are supported."
+                "Recursive types are not supported in RPC specs " <>
+                "— only struct-based recursive types are supported."
 
       true ->
         resolve_t_from_beam_uncached(module, ctx)
@@ -240,7 +240,7 @@ defmodule RpcElixir.Types.Walker do
     with {:ok, types} <- Code.Typespec.fetch_types(module),
          {_kind, {:t, type_ast, _vars}} <-
            Enum.find(types, fn {_k, {name, _, _}} -> name == :t end),
-         # matches: t() :: rhs, we only care about the rhs body
+         # matches: t() :: rhs — we only care about the rhs body
          {:"::", _, [_lhs, rhs]} <- Code.Typespec.type_to_quoted({:t, type_ast, []}) do
       attach_struct_if_object(walk(rhs, inner_ctx), module)
     else
@@ -296,7 +296,7 @@ defmodule RpcElixir.Types.Walker do
 
   defp ecto_type_to_internal(:map, _ctx) do
     raise ArgumentError,
-          "Ecto field type :map is not allowed in RPC specs, " <>
+          "Ecto field type :map is not allowed in RPC specs — " <>
             "replace with an embedded schema or an explicit %{key: type} shape."
   end
 
@@ -312,7 +312,7 @@ defmodule RpcElixir.Types.Walker do
 
   defp raise_struct_error(module) do
     raise ArgumentError,
-          "cannot resolve #{inspect(module)}.t() / %#{inspect(module)}{} from @spec, " <>
+          "cannot resolve #{inspect(module)}.t() / %#{inspect(module)}{} from @spec — " <>
             "write inline field types (`%#{inspect(module)}{id: integer(), ...}`) " <>
             "or define `@type t :: %__MODULE__{...}` in #{inspect(module)}"
   end

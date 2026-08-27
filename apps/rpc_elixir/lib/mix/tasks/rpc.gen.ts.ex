@@ -1,6 +1,6 @@
 defmodule Mix.Tasks.Rpc.Gen.Ts do
   @moduledoc """
-  Generates a TypeScript client file directly from an RPC router module.
+  Generates a TypeScript client file from a router module.
 
   ## Usage
 
@@ -8,11 +8,9 @@ defmodule Mix.Tasks.Rpc.Gen.Ts do
 
   ## Options
 
-    * `--router` - (required) the fully-qualified router module name
-    * `--out` - (required) the output path for the generated TypeScript file
-    * `--client-import` - the import specifier for the client package
-      (default: `"@elixir-ts-rpc/client"`)
-
+    * `--router` — required. The fully-qualified router module name.
+    * `--out` — required. The output path for the generated file.
+    * `--client-import` — client package specifier. Default `"@elixir-ts-rpc/client"`.
   """
 
   use Mix.Task
@@ -45,7 +43,7 @@ defmodule Mix.Tasks.Rpc.Gen.Ts do
 
     unless function_exported?(router_mod, :__procedures__, 0) do
       Mix.raise(
-        "Module #{inspect(router_mod)} is not an RPC router. It must `use RpcElixir.Router`"
+        "Module #{inspect(router_mod)} is not an RPC router — it must `use RpcElixir.Router`"
       )
     end
 

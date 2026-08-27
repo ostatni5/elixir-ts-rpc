@@ -132,7 +132,7 @@ defmodule RpcElixir.CodegenBenchTest do
   @tag timeout: :infinity
   test "codegen scaling benchmark" do
     IO.puts("")
-    IO.puts("  Elixir codegen benchmark - RpcElixir.Codegen.generate/2")
+    IO.puts("  Elixir codegen benchmark — RpcElixir.Codegen.generate/2")
     IO.puts("  " <> String.duplicate("-", 62))
 
     IO.puts(

@@ -1,6 +1,8 @@
 defmodule RpcElixir.Types.FromInferredTest do
   use ExUnit.Case, async: true
 
+  @moduletag :requires_inference
+
   alias RpcElixir.Types.FromInferred
   alias RpcElixir.TypespecFixtures.Inferred
 
@@ -54,7 +56,7 @@ defmodule RpcElixir.Types.FromInferredTest do
       assert {:ok, %{error: nil}} = FromInferred.fetch_rpc(Inferred, :list_users)
     end
 
-    test "succeeds without @spec - inference is the source" do
+    test "succeeds without @spec — inference is the source" do
       assert {:ok, %{error: nil}} = FromInferred.fetch_rpc(Inferred, :no_spec)
     end
 

@@ -12,7 +12,7 @@ type Props = {
 const fmtDateTime = (ms: number) => new Date(ms).toISOString().replace("T", " ").slice(0, 19);
 
 // Helpers take branded wire types, not bare `string`, so the compiler rejects a
-// plain string or a value branded for a different type. The point of branding.
+// plain string or a value branded for a different type — the point of branding.
 const fmtNaive = (s: NaiveDateTimeString) => s.replace("T", " ").slice(0, 19);
 
 // account_id is an `Int64String` the client must parse itself: the 64-bit value
@@ -76,11 +76,11 @@ function EmailCell({
       {error && (
         <p className="error">
           {error.message}
-          {/* Each error `source` drives a different affordance, the payoff of
+          {/* Each error `source` drives a different affordance — the payoff of
               narrowing by source in App.tsx rather than collapsing every failure
               into one message. */}
           {error.kind === "validation" && error.field && <> (field: {error.field})</>}
-          {error.kind === "auth" && <> - please log in again.</>}
+          {error.kind === "auth" && <> — please log in again.</>}
           {error.kind === "transport" && (
             <>
               {" "}
@@ -104,7 +104,7 @@ export function UsersTable({ users, meta, onUpdateEmail }: Props) {
         {meta.range.since && (
           <>
             {" "}
-            - created since <code>{fmtDateTime(meta.range.since)}</code>
+            — created since <code>{fmtDateTime(meta.range.since)}</code>
           </>
         )}
       </p>
@@ -132,7 +132,7 @@ export function UsersTable({ users, meta, onUpdateEmail }: Props) {
                 </td>
                 <td>{fmtDateTime(u.created_at)}</td>
                 <td>{fmtNaive(u.last_login_at)}</td>
-                <td>{u.birthday ?? "-"}</td>
+                <td>{u.birthday ?? "—"}</td>
               </tr>
             ))}
           </tbody>

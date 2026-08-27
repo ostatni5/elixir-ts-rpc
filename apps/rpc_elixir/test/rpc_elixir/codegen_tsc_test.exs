@@ -4,13 +4,15 @@ defmodule RpcElixir.CodegenTscTest do
   directory alongside a minimal tsconfig.json, then runs `npx tsc --noEmit`
   to verify the output type-checks cleanly.
 
-  Requires `npx` and TypeScript to be available. Skipped otherwise.
+  Requires `npx` and TypeScript to be available; skipped otherwise.
 
   Run with:
       cd apps/rpc_elixir && mix test --only integration test/rpc_elixir/codegen_tsc_test.exs
   """
 
   use ExUnit.Case, async: false
+
+  alias RpcElixir.JSON
 
   @moduletag :integration
 
@@ -73,7 +75,7 @@ defmodule RpcElixir.CodegenTscTest do
   # A procedure whose error union mixes a domain arm and a middleware arm
   # (`DomainError<"not_found" | "unauthorized"> | MiddlewareError<"unauthorized">`)
   # is the case `source` narrowing exists for. The consumer assigns the narrowed
-  # `e.code` to the source-specific literal type. It only type-checks if both a
+  # `e.code` to the source-specific literal type — it only type-checks if both a
   # `e.source === ...` check and an `isMiddlewareError` guard collapse the union
   # to the matching arm.
   @tag skip: not @tsc_available
